@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ error_title }}{% endblock %}
+{% block content %}
+<div class="card" style="text-align: center; padding: 40px;">
+  <h2 style="color: var(--card-r);">{{ error_title }}</h2>
+  <p style="font-size: 16px; margin: 20px 0;">{{ error_message|safe }}</p>
+  <pre style="background: #f3f4f6; padding: 12px; border-radius: 4px; display: inline-block; text-align: left; font-size: 13px;">cd /home/z/my-project/download/football_sim
+python run.py ingest</pre>
+</div>
+{% endblock %}

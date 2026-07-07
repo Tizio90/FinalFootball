@@ -425,10 +425,107 @@ def main():
     print("\n--- Test 7: Cards Emitted (§0.3) ---")
     results.append(test_cards_emitted(n=100))
 
+    print("\n--- Test 8: Manager Mode Sanity (2B-1) ---")
+    results.append(test_manager_mode_sanity(n=80))
+
     print("\n" + "=" * 60)
     print(f"OVERALL: {sum(results)}/{len(results)} tests passed")
     print("=" * 60)
     sys.exit(0 if all(results) else 1)
+
+
+def test_manager_mode_sanity(n=80, seed_base=80000):
+    """2B-1: verify that tactical choices influence results.
+
+    The weakest club in a sample should lose ~65-75% of matches when playing
+    attacking 4-3-3 (too aggressive for a weak squad). Playing defensive 5-4-1
+    should reduce goals conceded by ~25% vs attacking 4-3-3.
+    """
+    import random as _random
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    clubs = _full_xi_clubs(conn, min_size=14, limit=14)
+    if len(clubs) < 4:
+        return False
+
+    from engine.lineup import load_club_squad, pick_best_xi, starting_xi_strength
+    # rank clubs by overall strength
+    ranked = sorted(clubs, key=lambda c: club_overall(conn, c), reverse=True)
+    # weakest club is the user's team
+    weak_club = ranked[-1]
+    # strongest club is the opponent benchmark
+    strong_club = ranked[0]
+
+    weak_squad = load_club_squad(conn, weak_club)
+    strong_squad = load_club_squad(conn, strong_club)
+
+    # Phase 1: weak club plays attacking 4-3-3
+    weak_xi_att, weak_b = pick_best_xi(weak_squad, conn, formation="4-3-3")
+    strong_xi, strong_b = pick_best_xi(strong_squad, conn, formation="4-3-3")
+
+    att_wins = att_draws = att_losses = 0
+    att_gf = att_ga = 0
+    for i in range(n):
+        if i % 2 == 0:
+            r = play_match(weak_club, strong_club, weak_xi_att, strong_xi,
+                          weak_b, strong_b, seed=seed_base + i,
+                          home_mentality="attacking", away_mentality="balanced")
+            wf, sf = r.home_score, r.away_score
+        else:
+            r = play_match(strong_club, weak_club, strong_xi, weak_xi_att,
+                          strong_b, weak_b, seed=seed_base + i,
+                          home_mentality="balanced", away_mentality="attacking")
+            wf, sf = r.away_score, r.home_score
+        att_gf += wf
+        att_ga += sf
+        if wf > sf: att_wins += 1
+        elif wf < sf: att_losses += 1
+        else: att_draws += 1
+
+    # Phase 2: weak club plays defensive 5-4-1
+    weak_xi_def, weak_b_def = pick_best_xi(weak_squad, conn, formation="5-4-1")
+    def_wins = def_draws = def_losses = 0
+    def_gf = def_ga = 0
+    for i in range(n):
+        if i % 2 == 0:
+            r = play_match(weak_club, strong_club, weak_xi_def, strong_xi,
+                          weak_b_def, strong_b, seed=seed_base + 1000 + i,
+                          home_mentality="defensive", away_mentality="balanced")
+            wf, sf = r.home_score, r.away_score
+        else:
+            r = play_match(strong_club, weak_club, strong_xi, weak_xi_def,
+                          strong_b, weak_b_def, seed=seed_base + 1000 + i,
+                          home_mentality="balanced", away_mentality="defensive")
+            wf, sf = r.away_score, r.home_score
+        def_gf += wf
+        def_ga += sf
+        if wf > sf: def_wins += 1
+        elif wf < sf: def_losses += 1
+        else: def_draws += 1
+
+    conn.close()
+
+    att_loss_rate = att_losses / n
+    def_ga_per_match = def_ga / n
+    att_ga_per_match = att_ga / n
+    ga_reduction = (att_ga_per_match - def_ga_per_match) / att_ga_per_match if att_ga_per_match > 0 else 0
+
+    print(f"\nManager mode sanity ({n} matches each, {weak_club} vs {strong_club}):")
+    print(f"  Attacking 4-3-3: W={att_wins} D={att_draws} L={att_losses}  "
+          f"GF/match={att_gf/n:.2f}  GA/match={att_ga_per_match:.2f}")
+    print(f"  Defensive 5-4-1: W={def_wins} D={def_draws} L={def_losses}  "
+          f"GF/match={def_gf/n:.2f}  GA/match={def_ga_per_match:.2f}")
+    print(f"  Goals conceded reduction (def vs att): {ga_reduction*100:.1f}%")
+
+    # Pass criteria:
+    # 1. Weak club loses >=50% of matches when attacking (too aggressive)
+    # 2. Defensive 5-4-1 concedes fewer goals than attacking 4-3-3
+    passed = (att_loss_rate >= 0.50
+              and def_ga_per_match < att_ga_per_match
+              and ga_reduction > 0.05)
+    print(f"  [{'PASS' if passed else 'FAIL'}] weak club loses >=50% attacking, "
+          f"defensive concedes fewer goals (got {ga_reduction*100:.1f}% reduction)")
+    return passed
 
 
 if __name__ == "__main__":

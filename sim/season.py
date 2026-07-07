@@ -290,38 +290,89 @@ def get_nations(conn: sqlite3.Connection) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Persistence
+# Persistence — DDL and schema migrations
 # ---------------------------------------------------------------------------
 
-PERSIST_DDL = """
-CREATE TABLE IF NOT EXISTS matches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    season_id TEXT NOT NULL,
-    round INTEGER NOT NULL,
-    home_club TEXT NOT NULL,
-    away_club TEXT NOT NULL,
-    home_score INTEGER NOT NULL,
-    away_score INTEGER NOT NULL,
-    events_json TEXT NOT NULL,
-    played INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS seasons (
-    id TEXT PRIMARY KEY,
-    clubs_json TEXT NOT NULL,
-    rounds INTEGER NOT NULL,
-    created_at TEXT NOT NULL
-);
-"""
+# §0.1 fix: this DDL must match data/ingest.py:SEASONS_DDL exactly.
+# Both define the seasons table with division_id + division_name columns.
+# The old PERSIST_DDL here was missing those columns, causing a crash on
+# fresh DBs where init_persistence() ran before ingest().
+PERSIST_DDL_STATEMENTS = [
+    """CREATE TABLE IF NOT EXISTS matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        season_id TEXT NOT NULL,
+        round INTEGER NOT NULL,
+        home_club TEXT NOT NULL,
+        away_club TEXT NOT NULL,
+        home_score INTEGER NOT NULL,
+        away_score INTEGER NOT NULL,
+        events_json TEXT NOT NULL,
+        played INTEGER NOT NULL DEFAULT 1
+    )""",
+    """CREATE TABLE IF NOT EXISTS seasons (
+        id TEXT PRIMARY KEY,
+        clubs_json TEXT NOT NULL,
+        rounds INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        division_id INTEGER,
+        division_name TEXT
+    )""",
+]
+
+# §0.4: schema migrations for Phase 2B+ tables. Each migration is idempotent
+# (uses CREATE TABLE IF NOT EXISTS or ALTER TABLE ... ADD COLUMN with a check).
+# Version history:
+#   1 = Phase 2A schema (seasons + matches with division columns)
+#   2 = Phase 2B: careers table
+MIGRATIONS = [
+    # version 1 -> 2: add careers table for manager mode
+    """CREATE TABLE IF NOT EXISTS careers (
+        id TEXT PRIMARY KEY,
+        club TEXT NOT NULL,
+        division_id INTEGER,
+        season_id TEXT,
+        current_round INTEGER DEFAULT 0,
+        formation TEXT DEFAULT '4-3-3',
+        mentality TEXT DEFAULT 'balanced',
+        manual_xi_json TEXT,
+        manual_bench_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""",
+]
 
 
 def init_persistence(conn: sqlite3.Connection) -> None:
-    """Create matches/seasons tables if missing."""
+    """Create matches/seasons tables if missing, then run migrations.
+
+    §0.4: Uses PRAGMA user_version to track schema version and apply
+    incremental migrations. Never drops user data tables.
+    """
     cur = conn.cursor()
-    for stmt in PERSIST_DDL.split(";"):
-        s = stmt.strip()
-        if s:
-            cur.execute(s)
+    for stmt in PERSIST_DDL_STATEMENTS:
+        cur.execute(stmt)
     conn.commit()
+    _run_migrations(conn)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply pending migrations based on PRAGMA user_version."""
+    cur = conn.cursor()
+    cur.execute("PRAGMA user_version")
+    current_version = cur.fetchone()[0] or 0
+
+    for i, migration_sql in enumerate(MIGRATIONS):
+        target_version = i + 2  # migrations start at version 2
+        if current_version < target_version:
+            try:
+                cur.execute(migration_sql)
+                conn.commit()
+                cur.execute(f"PRAGMA user_version = {target_version}")
+                conn.commit()
+            except sqlite3.OperationalError as e:
+                # table/column already exists — safe to ignore
+                if "already exists" not in str(e):
+                    raise
 
 
 # ---------------------------------------------------------------------------
@@ -346,12 +397,17 @@ def run_season(
     persist: bool = True,
     season_id: str | None = None,
     verbose: bool = True,
+    division_id: int | None = None,
+    division_name: str | None = None,
 ) -> SeasonResult:
     """Run a full season: fixtures -> simulate every match -> standings.
 
     Phase 2 additions:
       - Auto-formation per club based on squad composition
       - Asymmetric home advantage derived from each club's recent home form
+    Phase 2B fix (§0.2):
+      - Persists division_id + division_name so the home page can show
+        which league a season belongs to.
     """
     import json
     import datetime as dt
@@ -371,9 +427,12 @@ def run_season(
     standings = Standings(clubs)
 
     if persist:
+        # §0.2 fix: include division_id + division_name in the INSERT
         conn.execute(
-            "INSERT INTO seasons (id, clubs_json, rounds, created_at) VALUES (?, ?, ?, ?)",
-            (season_id, json.dumps(clubs), len(fixtures), dt.datetime.now().isoformat()),
+            "INSERT INTO seasons (id, clubs_json, rounds, created_at, division_id, division_name) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (season_id, json.dumps(clubs), len(fixtures),
+             dt.datetime.now().isoformat(), division_id, division_name),
         )
         conn.commit()
 

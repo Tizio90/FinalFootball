@@ -105,11 +105,27 @@ FORMATION_352 = [
     ("LST",  "ATT", "C"),
 ]
 
+# 5-4-1: defensive formation for the manager-mode sanity test (2B-1)
+FORMATION_541 = [
+    ("GK",   "GK",  "C"),
+    ("RB",   "DEF", "R"),
+    ("RCB",  "DEF", "C"),
+    ("CB",   "DEF", "C"),
+    ("LCB",  "DEF", "C"),
+    ("LB",   "DEF", "L"),
+    ("RM",   "MID", "R"),
+    ("RCM",  "MID", "C"),
+    ("LCM",  "MID", "C"),
+    ("LM",   "MID", "L"),
+    ("ST",   "ATT", "C"),
+]
+
 ALL_FORMATIONS = {
     "4-3-3":   FORMATION_433,
     "4-4-2":   FORMATION_442,
     "4-2-3-1": FORMATION_4231,
     "3-5-2":   FORMATION_352,
+    "5-4-1":   FORMATION_541,
 }
 
 # Default (used when no formation is specified)

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}New Career{% endblock %}
+{% block content %}
+
+{% if step == "division" %}
+<div class="card">
+  <h2>Start a new career — pick a league</h2>
+  <p class="muted">Choose a league to manage in. You'll pick a club next.</p>
+  <table>
+    <thead>
+      <tr><th>League</th><th>Nation</th><th class="num">Clubs</th><th class="num">Players</th></tr>
+    </thead>
+    <tbody>
+    {% for d in divisions %}
+      <tr>
+        <td><a href="/career/new/{{ d.id }}">{{ d.name }}</a></td>
+        <td class="muted">{{ d.nation_name }}</td>
+        <td class="num">{{ d.club_count }}</td>
+        <td class="num muted">{{ d.player_count|toLocale }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% elif step == "club" %}
+<div class="card">
+  <h2>Start a new career — pick your club</h2>
+  <p class="muted">League: <strong>{{ division.based_raw }}</strong></p>
+
+  <form action="/career/create" method="post">
+    <input type="hidden" name="division_id" value="{{ division.id }}">
+    <input type="hidden" name="seed" value="1">
+    <input type="hidden" name="double" value="y">
+
+    <div style="margin: 16px 0;">
+      <label>Your club:</label>
+      <select name="club" required>
+        <option value="">— Select a club —</option>
+        {% for c in clubs %}
+        <option value="{{ c.name }}">{{ c.name }} ({{ c.player_count }} players)</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="margin: 16px 0;">
+      <label>Formation:</label>
+      <select name="formation">
+        <option value="4-3-3" selected>4-3-3 (balanced)</option>
+        <option value="4-4-2">4-4-2 (two strikers)</option>
+        <option value="4-2-3-1">4-2-3-1 (one striker)</option>
+        <option value="3-5-2">3-5-2 (wing-backs)</option>
+        <option value="5-4-1">5-4-1 (defensive)</option>
+      </select>
+    </div>
+
+    <div style="margin: 16px 0;">
+      <label>Mentality:</label>
+      <select name="mentality">
+        <option value="defensive">Defensive (fewer goals, more solidity)</option>
+        <option value="balanced" selected>Balanced</option>
+        <option value="attacking">Attacking (more goals, more risk)</option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn">▶ Start career</button>
+  </form>
+</div>
+
+<p><a href="/career/new" class="btn secondary">← Back to leagues</a></p>
+{% endif %}
+
+{% endblock %}

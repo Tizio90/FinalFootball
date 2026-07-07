@@ -13,9 +13,37 @@
   </div>
 </div>
 
+<div class="card" style="border-color: var(--accent); background: #f0fdf4;">
+  <h2 style="color: var(--accent);">🎮 Manager Mode</h2>
+  <p class="muted" style="margin: 0 0 12px;">Pick a club, choose your formation and mentality, set your XI, and play through a season match by match.</p>
+  <a href="/career/new" class="btn">▶ Start a new career</a>
+</div>
+
+{% if careers %}
+<div class="card">
+  <h2>Your careers</h2>
+  <table>
+    <thead>
+      <tr><th>Club</th><th>Formation</th><th>Mentality</th><th>Updated</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for c in careers %}
+      <tr>
+        <td><strong>{{ c.club }}</strong></td>
+        <td class="muted">{{ c.formation }}</td>
+        <td class="muted">{{ c.mentality }}</td>
+        <td class="muted">{{ c.updated_at[:19].replace('T', ' ') }}</td>
+        <td><a href="/career/{{ c.id }}" class="btn small">Continue</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>Quick start — popular leagues</h2>
-  <p class="muted" style="margin: 0 0 12px;">Click a league to simulate a full double round-robin season:</p>
+  <p class="muted" style="margin: 0 0 12px;">Click a league to simulate a full double round-robin season (auto, no management):</p>
   <table>
     <thead>
       <tr><th>League</th><th>Nation</th><th class="num">Clubs</th><th class="num">Players</th><th></th></tr>

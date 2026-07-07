@@ -64,8 +64,10 @@ def cmd_serve(args):
     conn = sqlite3.connect(DB_PATH)
     init_persistence(conn)
     conn.close()
-    print(f"\n  Football Sim UI starting at http://127.0.0.1:{args.port}/\n")
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    debug = args.debug if hasattr(args, "debug") else True
+    print(f"\n  Football Sim UI starting at http://127.0.0.1:{args.port}/")
+    print(f"  Debug mode: {'ON (full error tracebacks in browser)' if debug else 'off'}\n")
+    app.run(host=args.host, port=args.port, debug=debug)
 
 
 def cmd_match(args):
@@ -111,7 +113,9 @@ def main():
     p_serve = sub.add_parser("serve", help="start Flask UI")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=5000)
-    p_serve.add_argument("--debug", action="store_true")
+    p_serve.add_argument("--no-debug", dest="debug", action="store_false",
+                         default=True,
+                         help="disable Flask debug mode (off by default = ON)")
     p_serve.set_defaults(func=cmd_serve)
 
     p_match = sub.add_parser("match", help="simulate one match (full feed)")
@@ -122,8 +126,8 @@ def main():
 
     args = p.parse_args()
     if not getattr(args, "func", None):
-        # default: serve UI
-        args = argparse.Namespace(host="127.0.0.1", port=5000, debug=False)
+        # default: serve UI (debug ON by default)
+        args = argparse.Namespace(host="127.0.0.1", port=5000, debug=True)
         cmd_serve(args)
         return
     args.func(args)

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Career — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>{{ career.club }} <span class="muted" style="font-size:14px;">({{ career.formation }} · {{ career.mentality }})</span></h2>
+  <div class="stat-grid">
+    <div class="stat-row"><span class="label">Season</span><span class="value">{{ season.id }}</span></div>
+    <div class="stat-row"><span class="label">Division</span><span class="value">{{ season.division_name or '—' }}</span></div>
+    <div class="stat-row"><span class="label">Rounds played</span><span class="value">{{ rounds_played }} / {{ total_rounds }}</span></div>
+  </div>
+  <div style="margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap;">
+    <a href="/career/{{ career.id }}/tactics" class="btn secondary">⚙ Tactics</a>
+    {% if next_round %}
+    <form action="/career/{{ career.id }}/play-next" method="post" class="inline">
+      <button type="submit" class="btn">▶ Play round {{ next_round }}</button>
+    </form>
+    <form action="/career/{{ career.id }}/sim-rest" method="post" class="inline">
+      <button type="submit" class="btn secondary">⏩ Sim rest of season</button>
+    </form>
+    {% else %}
+    <span class="pill green">Season complete</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="flex: 2;">
+    <div class="card">
+      <h2>Standings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="pos">#</th><th>Club</th>
+            <th class="num">P</th><th class="num">W</th><th class="num">D</th><th class="num">L</th>
+            <th class="num">GF</th><th class="num">GA</th><th class="num">GD</th><th class="num">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in standings %}
+          <tr {% if row.club == career.club %}style="background: #fef3c7; font-weight: 600;"{% endif %}>
+            <td class="pos">{{ loop.index }}</td>
+            <td>{{ row.club }}{% if row.club == career.club %} ⭐{% endif %}</td>
+            <td class="num">{{ row.played }}</td>
+            <td class="num">{{ row.won }}</td>
+            <td class="num">{{ row.drawn }}</td>
+            <td class="num">{{ row.lost }}</td>
+            <td class="num">{{ row.gf }}</td>
+            <td class="num">{{ row.ga }}</td>
+            <td class="num">{{ '%+d' % row.gd }}</td>
+            <td class="num">{{ row.points }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col" style="flex: 1;">
+    {% if user_next %}
+    <div class="card">
+      <h2>Next match</h2>
+      <p style="text-align: center; font-size: 16px; margin: 16px 0;">
+        <strong>{{ user_next[0] }}</strong><br>
+        <span class="muted">vs</span><br>
+        <strong>{{ user_next[1] }}</strong>
+      </p>
+      <form action="/career/{{ career.id }}/play-next" method="post">
+        <button type="submit" class="btn" style="width: 100%;">▶ Play this match</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <h2>Recent results</h2>
+      {% if user_results %}
+      <table>
+        <tbody>
+        {% for m in user_results %}
+          <tr>
+            <td class="muted" style="font-size: 11px;">R{{ m.round }}</td>
+            <td>{{ m.home_club }} <strong>{{ m.home_score }}-{{ m.away_score }}</strong> {{ m.away_club }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted">No matches played yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<p><a href="/" class="btn secondary">← Home</a></p>
+{% endblock %}

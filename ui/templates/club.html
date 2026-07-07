@@ -75,8 +75,13 @@
         <td class="muted">{{ p.primary_role }}</td>
         <td class="muted">{{ p.preferred_foot }}</td>
         <td>
-          {% set m = morale_map.get(p.uid, 10) if morale_map else 10 %}
-          <span style="color: {% if m < 7 %}#b91c1c{% elif m < 14 %}#ca8a04{% else %}#15803d{% endif %}; font-weight: 600;">{{ m }}</span>
+          {% set m = morale_map.get(p.uid, 50) if morale_map else 50 %}
+          {% if m >= 75 %}<span style="color: #15803d; font-weight: 600;">Happy</span>
+          {% elif m >= 55 %}<span style="color: #15803d;">Content</span>
+          {% elif m >= 35 %}<span style="color: #ca8a04; font-weight: 500;">Uneasy</span>
+          {% elif m >= 20 %}<span style="color: #b45309; font-weight: 600;">Frustrated</span>
+          {% else %}<span style="color: #b91c1c; font-weight: 600;">Angry</span>
+          {% endif %}
         </td>
         <td class="num">{{ '%.1f' % p.ca.GK }}</td>
         <td class="num">{{ '%.1f' % p.ca.DEF }}</td>

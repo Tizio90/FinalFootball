@@ -457,14 +457,19 @@ class MatchEngine:
                       assist_candidate: dict[str, Any] | None = None,
                       allow_corner: bool = True) -> None:
         """§0.2: assist_candidate threaded through for goal attribution."""
-        # mentality affects defensive line height
-        line_height = MENTALITY_LINE_HEIGHT[
-            self.away_mentality if attacker == "home" else self.home_mentality]
+        # mentality affects defensive line height of the DEFENDING team.
+        # A defensive mentality (low line, 0.7) packs defenders in the box →
+        # MORE pressure on the shooter. An attacking mentality (high line, 1.3)
+        # gives the attacker more space → LESS pressure.
+        # So pressure multiplier = 2.0 - line_height (inverted).
+        defending_mentality = self.away_mentality if attacker == "home" else self.home_mentality
+        line_height = MENTALITY_LINE_HEIGHT[defending_mentality]
+        pressure_mult = 2.0 - line_height  # defensive 0.7 → 1.3, attacking 1.3 → 0.7
         pressure = (
             self._eff(nearest_def, "Tck") * 0.4 +
             self._eff(nearest_def, "Pos") * 0.3 +
             self._eff(nearest_def, "Mar") * 0.3
-        ) * line_height
+        ) * pressure_mult
 
         shot_quality = (
             self._eff(shooter, "Fin") * 0.30 +

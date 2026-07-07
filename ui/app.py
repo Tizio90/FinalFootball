@@ -143,16 +143,51 @@ def _get_club_lineup(club: str, conn: sqlite3.Connection) -> tuple[list, list, s
     return _LINEUP_CACHE[club]
 
 
+def clear_lineup_cache(club: str | None = None) -> None:
+    """§0.3 fix: invalidate the lineup cache.
+    If club is None, clears the entire cache. Otherwise clears just that club.
+    Call this after re-ingesting or after a transfer changes a club's squad."""
+    if club is None:
+        _LINEUP_CACHE.clear()
+    else:
+        _LINEUP_CACHE.pop(club, None)
+
+
+def _check_db_ready() -> str | None:
+    """§0.8 fix: return an error message if the DB is missing or not ingested."""
+    if not os.path.exists(DB_PATH):
+        return ("Database not found. Run <code>python run.py ingest</code> first "
+                "to build it from the CSV.")
+    conn = get_db()
+    try:
+        conn.execute("SELECT 1 FROM clubs LIMIT 1").fetchone()
+        return None
+    except sqlite3.OperationalError:
+        return ("Database exists but the <code>clubs</code> table is missing. "
+                "Run <code>python run.py ingest</code> to rebuild it.")
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @app.route("/")
 def home():
+    # §0.8 fix: check DB is ready before any query
+    db_error = _check_db_ready()
+    if db_error:
+        return render_template("error.html", error_title="Database not ready",
+                              error_message=db_error), 503
+
     conn = get_db()
     init_persistence(conn)
     seasons = conn.execute(
         "SELECT * FROM seasons ORDER BY created_at DESC LIMIT 10"
+    ).fetchall()
+    careers = conn.execute(
+        "SELECT * FROM careers ORDER BY updated_at DESC LIMIT 10"
     ).fetchall()
     stats = {
         "players": conn.execute("SELECT COUNT(*) AS n FROM players").fetchone()["n"],
@@ -171,7 +206,7 @@ def home():
     ).fetchall()
     conn.close()
     return render_template("home.html", seasons=seasons, stats=stats,
-                          quick_leagues=quick_leagues)
+                          quick_leagues=quick_leagues, careers=careers)
 
 
 @app.route("/nations")
@@ -234,11 +269,14 @@ def division_season_new(division_id: int):
     mode = request.form.get("mode", "all")
     season_id = f"season_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     if mode == "all":
+        # §0.2 fix: pass division_id + division_name to run_season
         run_season(clubs=clubs, double=double, seed=seed,
-                   season_id=season_id, verbose=False)
+                   season_id=season_id, verbose=False,
+                   division_id=division_id, division_name=div["based_raw"])
     else:
         # create empty season for round-by-round play
         conn = get_db()
+        init_persistence(conn)
         fixtures = round_robin_fixtures(clubs, double=double, seed=seed)
         conn.execute(
             "INSERT INTO seasons (id, clubs_json, rounds, created_at, division_id, division_name) "
@@ -249,6 +287,349 @@ def division_season_new(division_id: int):
         conn.commit()
         conn.close()
     return redirect(url_for("season_view", season_id=season_id))
+
+
+# ---------------------------------------------------------------------------
+# Career routes (Phase 2B-1: Manager Mode)
+# ---------------------------------------------------------------------------
+
+@app.route("/career/new")
+def career_new():
+    """Step 1: pick a division."""
+    db_error = _check_db_ready()
+    if db_error:
+        return render_template("error.html", error_title="Database not ready",
+                              error_message=db_error), 503
+    conn = get_db()
+    init_persistence(conn)
+    divisions = conn.execute(
+        "SELECT d.id, d.name, d.based_raw, d.player_count, d.club_count, "
+        "n.name as nation_name "
+        "FROM divisions d JOIN nations n ON d.nation_code = n.code "
+        "WHERE d.playable = 1 "
+        "ORDER BY d.player_count DESC LIMIT 20"
+    ).fetchall()
+    conn.close()
+    return render_template("career_new.html", divisions=divisions, step="division")
+
+
+@app.route("/career/new/<int:division_id>")
+def career_new_club(division_id: int):
+    """Step 2: pick a club in the chosen division."""
+    conn = get_db()
+    div = conn.execute(
+        "SELECT d.*, n.name as nation_name "
+        "FROM divisions d JOIN nations n ON d.nation_code = n.code "
+        "WHERE d.id = ?", (division_id,)
+    ).fetchone()
+    if div is None:
+        conn.close()
+        abort(404)
+    clubs = conn.execute(
+        "SELECT * FROM clubs WHERE division_id = ? AND player_count >= 14 "
+        "ORDER BY name ASC",
+        (division_id,)
+    ).fetchall()
+    conn.close()
+    return render_template("career_new.html", division=div, clubs=clubs, step="club")
+
+
+@app.route("/career/create", methods=["POST"])
+def career_create():
+    """Step 3: create the career + season + redirect to dashboard."""
+    division_id = int(request.form.get("division_id"))
+    club = request.form.get("club")
+    formation = request.form.get("formation", "4-3-3")
+    mentality = request.form.get("mentality", "balanced")
+    seed = int(request.form.get("seed", 1))
+    double = request.form.get("double", "y") == "y"
+
+    conn = get_db()
+    init_persistence(conn)
+    div = conn.execute("SELECT * FROM divisions WHERE id = ?", (division_id,)).fetchone()
+    if div is None:
+        conn.close()
+        abort(404)
+    clubs = select_clubs_by_division(conn, division_id, min_squad_size=14)
+    if club not in clubs:
+        conn.close()
+        return "Selected club is not in this division or has too few players", 400
+
+    import datetime as dt
+    season_id = f"season_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    career_id = f"career_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    fixtures = round_robin_fixtures(clubs, double=double, seed=seed)
+    conn.execute(
+        "INSERT INTO seasons (id, clubs_json, rounds, created_at, division_id, division_name) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (season_id, json.dumps(clubs), len(fixtures),
+         dt.datetime.now().isoformat(), division_id, div["based_raw"]),
+    )
+    conn.execute(
+        "INSERT INTO careers (id, club, division_id, season_id, current_round, "
+        "formation, mentality, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+        (career_id, club, division_id, season_id, formation, mentality,
+         dt.datetime.now().isoformat(), dt.datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("career_view", career_id=career_id))
+
+
+@app.route("/career/<career_id>")
+def career_view(career_id: str):
+    """Career dashboard: standings, next fixture, play buttons."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season = conn.execute("SELECT * FROM seasons WHERE id = ?",
+                         (career["season_id"],)).fetchone()
+    if season is None:
+        conn.close()
+        abort(404)
+    clubs = json.loads(season["clubs_json"])
+    from sim.season import Standings
+    standings = Standings(clubs)
+    matches = conn.execute(
+        "SELECT * FROM matches WHERE season_id = ? ORDER BY round, id",
+        (season["id"],),
+    ).fetchall()
+    for m in matches:
+        if m["played"]:
+            standings.record_result(m["home_club"], m["away_club"],
+                                   m["home_score"], m["away_score"])
+    rounds_played = max((m["round"] for m in matches), default=0)
+    total_rounds = season["rounds"]
+    fixtures = round_robin_fixtures(clubs, double=True, seed=1)
+    next_round = rounds_played + 1 if rounds_played < total_rounds else None
+    next_fixtures = fixtures[next_round - 1] if next_round else []
+    user_next = None
+    for home, away in next_fixtures:
+        if home == career["club"] or away == career["club"]:
+            user_next = (home, away)
+            break
+    user_results = [m for m in matches
+                    if m["home_club"] == career["club"] or m["away_club"] == career["club"]]
+    user_results = user_results[-5:]
+    conn.close()
+    return render_template("career.html", career=career, season=season,
+                          standings=standings.sorted_rows(),
+                          rounds_played=rounds_played, total_rounds=total_rounds,
+                          user_next=user_next, next_round=next_round,
+                          user_results=user_results)
+
+
+@app.route("/career/<career_id>/tactics", methods=["GET", "POST"])
+def career_tactics(career_id: str):
+    """View or update the user's formation, mentality, and manual XI."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    if request.method == "POST":
+        formation = request.form.get("formation", career["formation"])
+        mentality = request.form.get("mentality", career["mentality"])
+        manual_xi = []
+        for i in range(11):
+            uid = request.form.get(f"slot_{i}")
+            if uid and uid != "auto":
+                manual_xi.append(int(uid))
+            else:
+                manual_xi = []
+                break
+        manual_bench = []
+        for i in range(7):
+            uid = request.form.get(f"bench_{i}")
+            if uid and uid != "auto":
+                manual_bench.append(int(uid))
+            else:
+                manual_bench = []
+                break
+        import datetime as dt
+        conn.execute(
+            "UPDATE careers SET formation=?, mentality=?, manual_xi_json=?, "
+            "manual_bench_json=?, updated_at=? WHERE id=?",
+            (formation, mentality,
+             json.dumps(manual_xi) if manual_xi else None,
+             json.dumps(manual_bench) if manual_bench else None,
+             dt.datetime.now().isoformat(), career_id),
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("career_view", career_id=career_id))
+
+    from engine.lineup import ALL_FORMATIONS, load_club_squad, pick_best_xi, pick_manual_xi
+    squad = load_club_squad(conn, career["club"])
+    formation = career["formation"]
+    manual_xi_json = json.loads(career["manual_xi_json"]) if career["manual_xi_json"] else None
+    if manual_xi_json and len(manual_xi_json) == 11:
+        xi, bench = pick_manual_xi(squad, conn, formation, manual_xi_json,
+                                   json.loads(career["manual_bench_json"]) if career["manual_bench_json"] else None)
+    else:
+        xi, bench = pick_best_xi(squad, conn, formation=formation)
+    conn.close()
+    return render_template("tactics.html", career=career, squad=squad,
+                          xi=xi, bench=bench, formations=ALL_FORMATIONS,
+                          current_formation=formation,
+                          current_mentality=career["mentality"])
+
+
+@app.route("/career/<career_id>/play-next", methods=["POST"])
+def career_play_next(career_id: str):
+    """Simulate the next round: user's match with their tactics, rest auto."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season = conn.execute("SELECT * FROM seasons WHERE id = ?",
+                         (career["season_id"],)).fetchone()
+    clubs = json.loads(season["clubs_json"])
+    fixtures = round_robin_fixtures(clubs, double=True, seed=1)
+    rounds_played = conn.execute(
+        "SELECT MAX(round) FROM matches WHERE season_id = ?",
+        (season["id"],)
+    ).fetchone()[0] or 0
+    next_round = rounds_played + 1
+    if next_round > season["rounds"]:
+        conn.close()
+        return redirect(url_for("career_view", career_id=career_id))
+
+    round_fixtures = fixtures[next_round - 1]
+    import random
+    rng = random.Random(hash(season["id"]) + next_round)
+
+    from engine.lineup import (load_club_squad, pick_best_xi, pick_manual_xi,
+                                pick_formation_for_squad)
+    cache = {}
+    for c in clubs:
+        squad = load_club_squad(conn, c)
+        formation = pick_formation_for_squad(squad)
+        xi, bench = pick_best_xi(squad, conn, formation=formation)
+        cache[c] = (xi, bench, formation)
+
+    user_club = career["club"]
+    user_formation = career["formation"]
+    user_mentality = career["mentality"]
+    manual_xi_json = json.loads(career["manual_xi_json"]) if career["manual_xi_json"] else None
+    manual_bench_json = json.loads(career["manual_bench_json"]) if career["manual_bench_json"] else None
+    if manual_xi_json and len(manual_xi_json) == 11:
+        user_squad = load_club_squad(conn, user_club)
+        user_xi, user_bench = pick_manual_xi(user_squad, conn, user_formation,
+                                             manual_xi_json, manual_bench_json)
+    else:
+        user_squad = load_club_squad(conn, user_club)
+        user_xi, user_bench = pick_best_xi(user_squad, conn, formation=user_formation)
+    cache[user_club] = (user_xi, user_bench, user_formation)
+
+    for home, away in round_fixtures:
+        if home not in cache or away not in cache:
+            continue
+        hx, hb, _ = cache[home]
+        ax, ab, _ = cache[away]
+        home_ment = user_mentality if home == user_club else "balanced"
+        away_ment = user_mentality if away == user_club else "balanced"
+        m_seed = rng.randrange(0, 2**31)
+        result = play_match(home, away, hx, ax, hb, ab, seed=m_seed,
+                           home_mentality=home_ment, away_mentality=away_ment)
+        conn.execute(
+            "INSERT INTO matches (season_id, round, home_club, away_club, "
+            "home_score, away_score, events_json, played) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+            (season["id"], next_round, home, away,
+             result.home_score, result.away_score,
+             json.dumps([{
+                 "minute": e.minute, "type": e.type, "side": e.side,
+                 "text": e.text,
+                 "player_uids": e.player_uids,
+                 "player_names": e.player_names,
+             } for e in result.events])),
+        )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("career_view", career_id=career_id))
+
+
+@app.route("/career/<career_id>/sim-rest", methods=["POST"])
+def career_sim_rest(career_id: str):
+    """Simulate the rest of the season (all remaining rounds)."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season = conn.execute("SELECT * FROM seasons WHERE id = ?",
+                         (career["season_id"],)).fetchone()
+    clubs = json.loads(season["clubs_json"])
+    fixtures = round_robin_fixtures(clubs, double=True, seed=1)
+    rounds_played = conn.execute(
+        "SELECT MAX(round) FROM matches WHERE season_id = ?",
+        (season["id"],)
+    ).fetchone()[0] or 0
+
+    import random
+    rng = random.Random(hash(season["id"]) + rounds_played)
+
+    from engine.lineup import (load_club_squad, pick_best_xi, pick_manual_xi,
+                                pick_formation_for_squad)
+    cache = {}
+    for c in clubs:
+        squad = load_club_squad(conn, c)
+        formation = pick_formation_for_squad(squad)
+        xi, bench = pick_best_xi(squad, conn, formation=formation)
+        cache[c] = (xi, bench, formation)
+
+    user_club = career["club"]
+    user_formation = career["formation"]
+    user_mentality = career["mentality"]
+    manual_xi_json = json.loads(career["manual_xi_json"]) if career["manual_xi_json"] else None
+    manual_bench_json = json.loads(career["manual_bench_json"]) if career["manual_bench_json"] else None
+    if manual_xi_json and len(manual_xi_json) == 11:
+        user_squad = load_club_squad(conn, user_club)
+        user_xi, user_bench = pick_manual_xi(user_squad, conn, user_formation,
+                                             manual_xi_json, manual_bench_json)
+    else:
+        user_squad = load_club_squad(conn, user_club)
+        user_xi, user_bench = pick_best_xi(user_squad, conn, formation=user_formation)
+    cache[user_club] = (user_xi, user_bench, user_formation)
+
+    for r_idx in range(rounds_played + 1, season["rounds"] + 1):
+        round_fixtures = fixtures[r_idx - 1]
+        for home, away in round_fixtures:
+            if home not in cache or away not in cache:
+                continue
+            hx, hb, _ = cache[home]
+            ax, ab, _ = cache[away]
+            home_ment = user_mentality if home == user_club else "balanced"
+            away_ment = user_mentality if away == user_club else "balanced"
+            m_seed = rng.randrange(0, 2**31)
+            result = play_match(home, away, hx, ax, hb, ab, seed=m_seed,
+                               home_mentality=home_ment, away_mentality=away_ment)
+            conn.execute(
+                "INSERT INTO matches (season_id, round, home_club, away_club, "
+                "home_score, away_score, events_json, played) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                (season["id"], r_idx, home, away,
+                 result.home_score, result.away_score,
+                 json.dumps([{
+                     "minute": e.minute, "type": e.type, "side": e.side,
+                     "text": e.text,
+                     "player_uids": e.player_uids,
+                     "player_names": e.player_names,
+                 } for e in result.events])),
+            )
+        conn.commit()
+    conn.close()
+    return redirect(url_for("career_view", career_id=career_id))
 
 
 @app.route("/season/new", methods=["POST"])
