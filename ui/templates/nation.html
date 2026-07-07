@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ nation.name }} — Football Sim{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ nation.name }} <span class="muted" style="font-size:14px;">({{ nation.code }})</span></h2>
+  <div class="stat-grid">
+    <div class="stat-row"><span class="label">Total players</span><span class="value">{{ nation.player_count|toLocale }}</span></div>
+    <div class="stat-row"><span class="label">Divisions</span><span class="value">{{ divisions|length }}</span></div>
+    <div class="stat-row"><span class="label">Playable leagues</span><span class="value">{{ divisions|selectattr('playable')|list|length }}</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Divisions in {{ nation.name }}</h2>
+  <table>
+    <thead>
+      <tr><th>Division</th><th class="num">Clubs</th><th class="num">Players</th>
+          <th>Playable?</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for d in divisions %}
+      <tr>
+        <td><a href="/division/{{ d.id }}">{{ d.name }}</a></td>
+        <td class="num">{{ d.club_count }}</td>
+        <td class="num muted">{{ d.player_count|toLocale }}</td>
+        <td>
+          {% if d.playable %}
+            <span class="pill green">✓ Yes</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.playable %}
+          <form action="/division/{{ d.id }}/season/new" method="post" class="inline">
+            <input type="hidden" name="mode" value="all">
+            <input type="hidden" name="seed" value="1">
+            <input type="hidden" name="double" value="y">
+            <button type="submit" class="btn small">▶ Sim</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p><a href="/nations" class="btn secondary">← All nations</a></p>
+{% endblock %}

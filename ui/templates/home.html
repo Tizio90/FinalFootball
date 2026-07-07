@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Football Sim — Home{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>Database</h2>
+  <div class="stat-grid">
+    <div class="stat-row"><span class="label">Players</span><span class="value">{{ stats.players|toLocale }}</span></div>
+    <div class="stat-row"><span class="label">Clubs</span><span class="value">{{ stats.clubs|toLocale }}</span></div>
+    <div class="stat-row"><span class="label">Nations</span><span class="value">{{ stats.nations }}</span></div>
+    <div class="stat-row"><span class="label">Divisions</span><span class="value">{{ stats.divisions }}</span></div>
+    <div class="stat-row"><span class="label">Playable leagues</span><span class="value">{{ stats.playable }}</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Quick start — popular leagues</h2>
+  <p class="muted" style="margin: 0 0 12px;">Click a league to simulate a full double round-robin season:</p>
+  <table>
+    <thead>
+      <tr><th>League</th><th>Nation</th><th class="num">Clubs</th><th class="num">Players</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for d in quick_leagues %}
+      <tr>
+        <td><a href="/division/{{ d.id }}">{{ d.name }}</a></td>
+        <td class="muted">{{ d.nation_name }}</td>
+        <td class="num">{{ d.club_count }}</td>
+        <td class="num muted">{{ d.player_count|toLocale }}</td>
+        <td>
+          <form action="/division/{{ d.id }}/season/new" method="post" class="inline">
+            <input type="hidden" name="mode" value="all">
+            <input type="hidden" name="seed" value="1">
+            <input type="hidden" name="double" value="y">
+            <button type="submit" class="btn small">▶ Sim season</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Browse all leagues</h2>
+  <p style="margin: 0 0 12px;">
+    <a href="/nations" class="btn">🌐 Browse by Nation ({{ stats.nations }})</a>
+  </p>
+  <p class="muted" style="margin: 0;">{{ stats.playable }} leagues have enough clubs (≥4) with enough players (≥14) to simulate a season.</p>
+</div>
+
+{% if seasons %}
+<div class="card">
+  <h2>Recent seasons</h2>
+  <table>
+    <thead>
+      <tr><th>Season ID</th><th class="num">Clubs</th><th class="num">Rounds</th>
+          <th>Created</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for s in seasons %}
+      <tr>
+        <td><code>{{ s.id }}</code>{% if s.division_name %}<br><span class="muted" style="font-size:11px;">{{ s.division_name }}</span>{% endif %}</td>
+        <td class="num">{{ (s.clubs_json|fromjson).__len__() }}</td>
+        <td class="num">{{ s.rounds }}</td>
+        <td class="muted">{{ s.created_at[:19].replace('T', ' ') }}</td>
+        <td><a href="/season/{{ s.id }}" class="btn small">Open</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

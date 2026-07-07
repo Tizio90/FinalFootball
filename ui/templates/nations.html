@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Nations — Football Sim{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Nations ({{ nations|length }})</h2>
+  <p class="muted">Click a nation to see its leagues. Nations with the most players are shown first.</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Nation</th><th>Code</th><th class="num">Players</th></tr>
+    </thead>
+    <tbody>
+    {% for n in nations %}
+      <tr>
+        <td class="muted">{{ loop.index }}</td>
+        <td><a href="/nation/{{ n.code }}">{{ n.name }}</a></td>
+        <td class="muted">{{ n.code }}</td>
+        <td class="num">{{ n.player_count|toLocale }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

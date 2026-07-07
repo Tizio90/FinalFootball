@@ -1,0 +1,1 @@
+"""UI package: Flask app for browsing seasons & matches."""

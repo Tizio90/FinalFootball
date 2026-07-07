@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}Football Sim{% endblock %}</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --primary: #0b3d2e;
+    --accent: #16a34a;
+    --text: #111827;
+    --muted: #6b7280;
+    --border: #d1d5db;
+    --goal: #15803d;
+    --miss: #b45309;
+    --save: #1d4ed8;
+    --card-y: #ca8a04;
+    --card-r: #b91c1c;
+    --sub:   #6b21a8;
+    --info:  #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+                 Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji";
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    background: var(--primary); color: white;
+    padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  header a { color: #d1fae5; text-decoration: none; }
+  header a:hover { color: white; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header nav { margin-left: auto; display: flex; gap: 16px; font-size: 13px; }
+  main { max-width: 1100px; margin: 24px auto; padding: 0 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px 20px; margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; color: var(--primary); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+  th { background: #f9fafb; font-weight: 600; color: var(--muted); text-transform: uppercase;
+       font-size: 11px; letter-spacing: 0.04em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.center, th.center { text-align: center; }
+  .pos { font-weight: 600; color: var(--muted); width: 36px; text-align: right; }
+  .club-name { font-weight: 500; }
+  .form {
+    display: inline-block; width: 18px; height: 18px; line-height: 18px;
+    text-align: center; font-size: 10px; font-weight: 700; color: white;
+    border-radius: 3px; margin-right: 2px;
+  }
+  .form.W { background: var(--goal); }
+  .form.D { background: var(--muted); }
+  .form.L { background: var(--card-r); }
+  .btn {
+    display: inline-block; padding: 6px 14px; border-radius: 4px;
+    background: var(--accent); color: white; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 500; text-decoration: none;
+  }
+  .btn:hover { background: #15803d; }
+  .btn.secondary { background: white; color: var(--primary); border: 1px solid var(--border); }
+  .btn.secondary:hover { background: #f0fdf4; }
+  .btn.small { padding: 3px 8px; font-size: 12px; }
+  .row { display: flex; gap: 16px; }
+  .col { flex: 1; }
+  .muted { color: var(--muted); }
+  .scoreline { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .scoreline a { color: var(--text); text-decoration: none; }
+  .scoreline a:hover { text-decoration: underline; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    background: #e5e7eb; color: var(--muted); font-size: 11px; font-weight: 600;
+  }
+  .pill.green { background: #d1fae5; color: var(--goal); }
+  form.inline { display: inline; }
+  select, input { padding: 4px 8px; border: 1px solid var(--border); border-radius: 3px;
+                  font-size: 13px; background: white; }
+  label { font-size: 13px; color: var(--muted); margin-right: 4px; }
+
+  /* Match event feed */
+  .match-header {
+    background: var(--primary); color: white;
+    padding: 24px; text-align: center; margin: -24px -24px 24px;
+  }
+  .match-header .score {
+    font-size: 48px; font-weight: 700; letter-spacing: 0.05em; margin: 8px 0;
+  }
+  .match-header .clubs { font-size: 18px; font-weight: 500; }
+  .match-header .meta { font-size: 12px; color: #d1fae5; margin-top: 4px; }
+  .feed {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 16px; max-height: 600px; overflow-y: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+  }
+  .feed .event { padding: 4px 0; border-bottom: 1px dashed #e5e7eb; }
+  .feed .event:last-child { border-bottom: none; }
+  .feed .event.goal { color: var(--goal); font-weight: 700; background: #f0fdf4; padding: 6px 8px; border-radius: 3px; }
+  .feed .event.save { color: var(--save); font-weight: 500; }
+  .feed .event.miss { color: var(--miss); }
+  .feed .event.card { color: var(--card-y); font-weight: 600; }
+  .feed .event.sub { color: var(--sub); }
+  .feed .event.foul { color: #92400e; }
+  .feed .event.offside { color: #6b7280; font-style: italic; }
+  .feed .event.injury { color: #b91c1c; font-weight: 600; }
+  .feed .event.free_kick { color: #1d4ed8; }
+  .feed .event.chance { color: #4b5563; }
+  .feed .event.info { color: var(--info); font-style: italic; }
+  .feed .event .minute {
+    display: inline-block; width: 36px; color: var(--muted); font-weight: 600;
+  }
+
+  /* Lineup table */
+  .lineup { font-size: 12px; }
+  .lineup th, .lineup td { padding: 3px 6px; }
+  .slot-GK { color: #b45309; font-weight: 600; }
+  .slot-DEF { color: #1d4ed8; }
+  .slot-MID { color: #15803d; }
+  .slot-ATT { color: #b91c1c; }
+
+  /* Stats */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+  .stat-row { display: flex; justify-content: space-between; padding: 4px 0;
+              border-bottom: 1px dashed #e5e7eb; }
+  .stat-row .label { color: var(--muted); }
+  .stat-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Player list */
+  .player-row { display: flex; justify-content: space-between; padding: 4px 0;
+                border-bottom: 1px solid #f3f4f6; }
+  .player-row .name { font-weight: 500; }
+  .player-row .meta { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/">⚽ Football Sim</a></h1>
+  <nav>
+    <a href="/">Home</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ division.based_raw }} — Football Sim{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ division.based_raw }}</h2>
+  <div class="stat-grid">
+    <div class="stat-row"><span class="label">Nation</span>
+      <span class="value"><a href="/nation/{{ division.nation_code }}">{{ division.nation_name }}</a></span></div>
+    <div class="stat-row"><span class="label">Division</span><span class="value">{{ division.name }}</span></div>
+    <div class="stat-row"><span class="label">Clubs</span><span class="value">{{ division.club_count }}</span></div>
+    <div class="stat-row"><span class="label">Players</span><span class="value">{{ division.player_count|toLocale }}</span></div>
+    <div class="stat-row"><span class="label">Playable</span>
+      <span class="value">{% if division.playable %}✓ Yes{% else %}— No{% endif %}</span></div>
+  </div>
+  {% if division.playable and clubs|length >= 2 %}
+  <div style="margin-top: 16px;">
+    <form action="/division/{{ division.id }}/season/new" method="post" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+      <div>
+        <label>Seed</label>
+        <input type="number" name="seed" value="1" min="1" style="width: 80px;">
+      </div>
+      <div>
+        <label>Fixtures</label>
+        <select name="double">
+          <option value="y" selected>Double round-robin</option>
+          <option value="n">Single round-robin</option>
+        </select>
+      </div>
+      <div>
+        <label>Simulate</label>
+        <select name="mode">
+          <option value="all" selected>Whole season</option>
+          <option value="manual">Round-by-round</option>
+        </select>
+      </div>
+      <button type="submit" class="btn">▶ Start season ({{ clubs|length }} clubs)</button>
+    </form>
+  </div>
+  {% elif division.playable and clubs|length < 2 %}
+  <p class="muted" style="margin-top: 12px;">Not enough clubs with ≥14 players to simulate a season.</p>
+  {% else %}
+  <p class="muted" style="margin-top: 12px;">This division is not marked as playable (needs ≥4 clubs with ≥14 players each).</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Clubs ({{ clubs|length }})</h2>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Club</th><th class="num">Players</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for c in clubs %}
+      <tr>
+        <td class="muted">{{ loop.index }}</td>
+        <td><a href="/club/{{ c.name }}">{{ c.name }}</a></td>
+        <td class="num">{{ c.player_count }}</td>
+        <td>
+          {% if c.player_count >= 14 %}
+            <a href="/club/{{ c.name }}" class="btn small">View squad</a>
+          {% else %}
+            <span class="muted" style="font-size: 11px;">too few players</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p><a href="/nation/{{ division.nation_code }}" class="btn secondary">← {{ division.nation_name }}</a></p>
+{% endblock %}
