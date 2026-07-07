@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+data/football.db
+venv/
+.venv/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+*.log
