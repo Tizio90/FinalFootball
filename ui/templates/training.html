@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Training — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Training</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">🏋️ Training</h1>
+      <div class="sub">{{ career.club }} · set the focus and intensity of your weekly training sessions</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>
+      Training <strong>focus</strong> decides which attributes develop fastest. <strong>Intensity</strong> controls how fast players grow — but also injury risk and fatigue.
+      Hiring coaches (see <a href="/career/{{ career.id }}/staff">Staff</a>) adds a bonus to development.
+    </div>
+  </div>
+
+  <div class="kpi-grid" style="margin-top: 6px;">
+    <div class="kpi">
+      <div class="v" style="font-size: 14px;">{{ foci.get(current_focus, current_focus) }}</div>
+      <div class="l">Current focus</div>
+    </div>
+    <div class="kpi">
+      <div class="v" style="font-size: 14px;">{{ intensities.get(current_intensity, current_intensity).split(' (')[0] }}</div>
+      <div class="l">Current intensity</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{{ '%+d' % ((staff_bonus - 1) * 100) }}%</div>
+      <div class="l">Staff training bonus</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🎯</span> Training focus</h2>
+    <span class="muted small">Boost one area at a time</span>
+  </div>
+  <form action="/career/{{ career.id }}/training" method="post">
+    <div class="grid-5" style="gap: 10px; margin-bottom: 16px;">
+      {% set focus_meta = {
+        "general":   {"icon": "⚖️", "desc": "Balanced development across all attributes"},
+        "attacking": {"icon": "⚔️", "desc": "Boost ATT/MID attributes · slight DEF decline"},
+        "defending": {"icon": "🛡️", "desc": "Boost DEF/GK attributes · slight ATT decline"},
+        "fitness":   {"icon": "💪", "desc": "Boost physical attributes · slight technical decline"},
+        "technical": {"icon": "🎯", "desc": "Boost technical attributes · slight physical decline"}
+      } %}
+      {% for key, label in foci.items() %}
+      {% set meta = focus_meta.get(key, {"icon": "•", "desc": label}) %}
+      <label style="display: block; cursor: pointer; margin: 0;">
+        <input type="radio" name="focus" value="{{ key }}" {% if key == current_focus %}checked{% endif %}
+               style="display: none;"
+               onchange="document.querySelectorAll('input[name=focus]').forEach(r => r.closest('.focus-card').classList.remove('selected'));
+                        this.closest('.focus-card').classList.add('selected');">
+        <div class="focus-card" style="border: 2px solid {% if key == current_focus %}var(--accent){% else %}var(--border){% endif %};
+             background: {% if key == current_focus %}var(--accent-50){% else %}#fff{% endif %};
+             border-radius: var(--r-md); padding: 14px; text-align: center; transition: all .15s ease;">
+          <div style="font-size: 26px; margin-bottom: 6px;">{{ meta.icon }}</div>
+          <div class="strong" style="font-size: 13px; color: var(--primary);">{{ label.split(' (')[0] }}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px; line-height: 1.4;">{{ meta.desc }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-head">
+      <h2><span class="icon">⚡</span> Training intensity</h2>
+      <span class="muted small">Trade development speed for injury risk</span>
+    </div>
+    <div class="grid-3" style="gap: 10px; margin-bottom: 16px;">
+      {% set intensity_meta = {
+        "light":     {"icon": "🌙", "desc": "Slower development · low injury risk · low fatigue"},
+        "standard":  {"icon": "⚖️", "desc": "Balanced development · moderate risk"},
+        "intensive": {"icon": "🔥", "desc": "Faster development · higher injury risk + fatigue"}
+      } %}
+      {% for key, label in intensities.items() %}
+      {% set meta = intensity_meta.get(key, {"icon": "•", "desc": label}) %}
+      <label style="display: block; cursor: pointer; margin: 0;">
+        <input type="radio" name="intensity" value="{{ key }}" {% if key == current_intensity %}checked{% endif %}
+               style="display: none;"
+               onchange="document.querySelectorAll('input[name=intensity]').forEach(r => r.closest('.intensity-card').classList.remove('selected'));
+                        this.closest('.intensity-card').classList.add('selected');">
+        <div class="intensity-card" style="border: 2px solid {% if key == current_intensity %}var(--accent){% else %}var(--border){% endif %};
+             background: {% if key == current_intensity %}var(--accent-50){% else %}#fff{% endif %};
+             border-radius: var(--r-md); padding: 14px; text-align: center; transition: all .15s ease;">
+          <div style="font-size: 26px; margin-bottom: 6px;">{{ meta.icon }}</div>
+          <div class="strong" style="font-size: 13px; color: var(--primary);">{{ label.split(' (')[0] }}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 4px; line-height: 1.4;">{{ meta.desc }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-head">
+      <h2><span class="icon">👥</span> Staff contribution</h2>
+      <span class="pill {% if staff_bonus > 1.05 %}green{% elif staff_bonus > 1.0 %}amber{% else %}red{% endif %}">
+        {% if staff_bonus > 1.0 %}+{{ '%+.1f' % ((staff_bonus - 1) * 100) }}% bonus{% else %}No staff hired{% endif %}
+      </span>
+    </div>
+    <div class="stat-list">
+      <div class="row-item"><span class="lbl">Effective training multiplier</span><span class="val tabular">{{ '%.2f×' % staff_bonus }}</span></div>
+      <div class="row-item"><span class="lbl">Bonus this season</span><span class="val accent tabular">+{{ '%.0f' % ((staff_bonus - 1) * 100) }}%</span></div>
+    </div>
+    <div class="muted small" style="margin-top: 10px;">
+      💡 Hire an Assistant Manager and family-specific coaches on the
+      <a href="/career/{{ career.id }}/staff">staff page</a> to boost this multiplier.
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="btn-group">
+      <button type="submit" class="btn large">💾 Save training settings</button>
+      <a href="/career/{{ career.id }}" class="btn secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<style>
+  .focus-card:hover, .intensity-card:hover { border-color: var(--accent-500) !important; background: var(--accent-50) !important; }
+  input[type="radio"]:checked + .focus-card,
+  input[type="radio"]:checked + .intensity-card { border-color: var(--accent) !important; background: var(--accent-50) !important; box-shadow: 0 0 0 3px rgba(22,163,74,0.12); }
+</style>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+</div>
+
+{% endblock %}

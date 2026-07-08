@@ -323,7 +323,9 @@ PERSIST_DDL_STATEMENTS = [
 # (uses CREATE TABLE IF NOT EXISTS or ALTER TABLE ... ADD COLUMN with a check).
 # Version history:
 #   1 = Phase 2A schema (seasons + matches with division columns)
-#   2 = Phase 2B: careers table
+#   2 = Phase 2B-1: careers table
+#   3 = Phase 2B-2: injuries table + player morale tracking
+#   4 = Phase 2B-3: transfers table + club reputation
 MIGRATIONS = [
     # version 1 -> 2: add careers table for manager mode
     """CREATE TABLE IF NOT EXISTS careers (
@@ -339,6 +341,48 @@ MIGRATIONS = [
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )""",
+    # version 2 -> 3: add injuries table for cross-match injury carryover
+    """CREATE TABLE IF NOT EXISTS injuries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        career_id TEXT,
+        season_id TEXT,
+        player_uid INTEGER NOT NULL,
+        player_name TEXT,
+        club TEXT NOT NULL,
+        injury_round INTEGER NOT NULL,
+        matches_out INTEGER NOT NULL,
+        matches_remaining INTEGER NOT NULL,
+        injury_type TEXT,
+        created_at TEXT NOT NULL
+    )""",
+    # version 3 -> 4: add transfers table + cup fixtures
+    """CREATE TABLE IF NOT EXISTS transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        career_id TEXT,
+        season_id TEXT,
+        player_uid INTEGER NOT NULL,
+        player_name TEXT,
+        from_club TEXT NOT NULL,
+        to_club TEXT NOT NULL,
+        fee INTEGER DEFAULT 0,
+        transfer_window TEXT,
+        created_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS cup_fixtures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        career_id TEXT,
+        season_id TEXT,
+        cup_name TEXT NOT NULL,
+        round INTEGER NOT NULL,
+        round_name TEXT,
+        home_club TEXT NOT NULL,
+        away_club TEXT NOT NULL,
+        home_score INTEGER,
+        away_score INTEGER,
+        played INTEGER DEFAULT 0,
+        next_round_match_id INTEGER,
+        created_at TEXT NOT NULL
+    )""",
 ]
 
 
@@ -347,16 +391,73 @@ def init_persistence(conn: sqlite3.Connection) -> None:
 
     §0.4: Uses PRAGMA user_version to track schema version and apply
     incremental migrations. Never drops user data tables.
+
+    Also force-creates the careers table if it's missing for any reason
+    (e.g. an old DB that predates migrations). This is a safety net.
     """
     cur = conn.cursor()
     for stmt in PERSIST_DDL_STATEMENTS:
         cur.execute(stmt)
     conn.commit()
     _run_migrations(conn)
+    # Safety net: ensure all Phase 2B tables exist even if migrations failed
+    # silently on an old DB. CREATE TABLE IF NOT EXISTS is a no-op if they
+    # already exist.
+    for safety_sql in [
+        """CREATE TABLE IF NOT EXISTS careers (
+            id TEXT PRIMARY KEY, club TEXT NOT NULL, division_id INTEGER,
+            season_id TEXT, current_round INTEGER DEFAULT 0,
+            formation TEXT DEFAULT '4-3-3', mentality TEXT DEFAULT 'balanced',
+            manual_xi_json TEXT, manual_bench_json TEXT,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS injuries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, career_id TEXT, season_id TEXT,
+            player_uid INTEGER NOT NULL, player_name TEXT, club TEXT NOT NULL,
+            injury_round INTEGER NOT NULL, matches_out INTEGER NOT NULL,
+            matches_remaining INTEGER NOT NULL, injury_type TEXT,
+            created_at TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS transfers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, career_id TEXT, season_id TEXT,
+            player_uid INTEGER NOT NULL, player_name TEXT,
+            from_club TEXT NOT NULL, to_club TEXT NOT NULL, fee INTEGER DEFAULT 0,
+            transfer_window TEXT, created_at TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS cup_fixtures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, career_id TEXT, season_id TEXT,
+            cup_name TEXT NOT NULL, round INTEGER NOT NULL, round_name TEXT,
+            home_club TEXT NOT NULL, away_club TEXT NOT NULL,
+            home_score INTEGER, away_score INTEGER, played INTEGER DEFAULT 0,
+            next_round_match_id INTEGER, created_at TEXT NOT NULL
+        )""",
+    ]:
+        cur.execute(safety_sql)
+    # Fix: add created_at column to cup_fixtures if it's missing (old DBs)
+    try:
+        cur.execute("SELECT created_at FROM cup_fixtures LIMIT 0")
+    except sqlite3.OperationalError:
+        try:
+            cur.execute("ALTER TABLE cup_fixtures ADD COLUMN created_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists or table doesn't exist
+    conn.commit()
+    # Phase 3: run Phase 3 migrations (player development, staff, finances, etc.)
+    try:
+        from sim.phase3 import run_phase3_migrations
+        run_phase3_migrations(conn)
+    except ImportError:
+        pass  # phase3.py not available yet
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
-    """Apply pending migrations based on PRAGMA user_version."""
+    """Apply pending migrations based on PRAGMA user_version.
+
+    On older DBs (user_version = 0, pre-Phase-2B), we jump straight to
+    the latest version after ensuring all tables exist. This handles the
+    case where a user pulled the new code but their DB was created before
+    migrations existed.
+    """
     cur = conn.cursor()
     cur.execute("PRAGMA user_version")
     current_version = cur.fetchone()[0] or 0
@@ -370,8 +471,12 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                 cur.execute(f"PRAGMA user_version = {target_version}")
                 conn.commit()
             except sqlite3.OperationalError as e:
-                # table/column already exists — safe to ignore
-                if "already exists" not in str(e):
+                # table/column already exists — safe to ignore, but still
+                # bump the version so we don't retry every request
+                if "already exists" in str(e):
+                    cur.execute(f"PRAGMA user_version = {target_version}")
+                    conn.commit()
+                else:
                     raise
 
 

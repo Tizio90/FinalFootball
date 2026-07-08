@@ -1,23 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Nations — Football Sim{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Nations ({{ nations|length }})</h2>
-  <p class="muted">Click a nation to see its leagues. Nations with the most players are shown first.</p>
+
+<div class="page-head">
+  <div class="title-block">
+    <div class="breadcrumb">
+      <a href="/">Home</a>
+      <span class="sep">/</span>
+      <span>Nations</span>
+    </div>
+    <h1>Nations</h1>
+    <div class="sub">{{ nations|length }} countries · click a nation to see its leagues · sorted by player count</div>
+  </div>
+</div>
+
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">🌍</span> All nations</h2>
+      <span class="muted small">{{ nations|length }} total</span>
+    </div>
+  </div>
   <table>
     <thead>
-      <tr><th>#</th><th>Nation</th><th>Code</th><th class="num">Players</th></tr>
+      <tr>
+        <th class="num" style="width: 60px;">#</th>
+        <th>Nation</th>
+        <th>Code</th>
+        <th class="num">Players</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for n in nations %}
       <tr>
-        <td class="muted">{{ loop.index }}</td>
-        <td><a href="/nation/{{ n.code }}">{{ n.name }}</a></td>
-        <td class="muted">{{ n.code }}</td>
-        <td class="num">{{ n.player_count|toLocale }}</td>
+        <td class="muted num">{{ loop.index }}</td>
+        <td>
+          <a href="/nation/{{ n.code }}" style="font-weight: 600; color: var(--primary);">{{ n.name }}</a>
+        </td>
+        <td><span class="badge">{{ n.code }}</span></td>
+        <td class="num strong">{{ n.player_count|toLocale }}</td>
+        <td class="right"><a href="/nation/{{ n.code }}" class="btn small secondary">View →</a></td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
+
 {% endblock %}

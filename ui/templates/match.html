@@ -1,94 +1,223 @@
 {% extends "base.html" %}
 {% block title %}{{ match.home_club }} vs {{ match.away_club }}{% endblock %}
 {% block content %}
-<div class="match-header">
-  <div class="meta">Season {{ match.season_id }} — Round {{ match.round }}</div>
-  <div class="clubs">
-    <a href="/club/{{ match.home_club }}" style="color:white; text-decoration:none;">{{ match.home_club }}</a>
-    <span style="margin: 0 16px; color:#d1fae5;">v</span>
-    <a href="/club/{{ match.away_club }}" style="color:white; text-decoration:none;">{{ match.away_club }}</a>
-  </div>
-  <div class="score">{{ match.home_score }} - {{ match.away_score }}</div>
-  <div class="meta">Full time</div>
-  {% if home_formation or away_formation %}
-  <div class="meta" style="margin-top: 8px;">Formations: {{ home_formation or '?' }} vs {{ away_formation or '?' }}</div>
-  {% endif %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/season/{{ match.season_id }}">Season {{ match.season_id }}</a>
+  <span class="sep">/</span>
+  <span>Match</span>
 </div>
+
+<div class="scoreboard">
+  <div class="meta-top">
+    Season {{ match.season_id }} · Round {{ match.round }}
+    <span class="pill dark" style="margin-left: 8px;">Full time</span>
+  </div>
+  <div class="teams">
+    <div class="team">
+      <span class="crest lg">{{ match.home_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.home_club }}">{{ match.home_club }}</a>
+      {% if home_formation %}<span class="formation-badge">{{ home_formation }}</span>{% endif %}
+    </div>
+    <div class="score-block">
+      <div class="score">{{ match.home_score }}</div>
+      <div class="dash">–</div>
+      <div class="score">{{ match.away_score }}</div>
+    </div>
+    <div class="team">
+      <span class="crest lg">{{ match.away_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.away_club }}">{{ match.away_club }}</a>
+      {% if away_formation %}<span class="formation-badge">{{ away_formation }}</span>{% endif %}
+    </div>
+  </div>
+  <div class="meta-bottom">
+    {% if home_formation or away_formation %}{{ home_formation or '?' }} vs {{ away_formation or '?' }} · {% endif %}Full time
+  </div>
+</div>
+
+<!-- 2D Pitch Visualization (Phase 3D) -->
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🗺️</span> Pitch View</h2>
+    <span class="muted small">Event locations</span>
+  </div>
+  <div id="pitch-container" style="display: flex; justify-content: center; padding: 16px;">
+    <svg id="pitch-svg" width="500" height="300" viewBox="0 0 500 300" style="background: #2d7a3e; border-radius: 8px;">
+      <!-- Pitch markings -->
+      <rect x="10" y="10" width="480" height="280" fill="none" stroke="white" stroke-width="2"/>
+      <line x1="250" y1="10" x2="250" y2="290" stroke="white" stroke-width="2"/>
+      <circle cx="250" cy="150" r="40" fill="none" stroke="white" stroke-width="2"/>
+      <circle cx="250" cy="150" r="3" fill="white"/>
+      <!-- Penalty areas -->
+      <rect x="10" y="80" width="60" height="140" fill="none" stroke="white" stroke-width="2"/>
+      <rect x="430" y="80" width="60" height="140" fill="none" stroke="white" stroke-width="2"/>
+      <!-- Goals -->
+      <rect x="5" y="130" width="5" height="40" fill="white"/>
+      <rect x="490" y="130" width="5" height="40" fill="white"/>
+      <!-- Event dots will be added here by JS -->
+      <g id="event-dots"></g>
+    </svg>
+  </div>
+  <div style="display: flex; gap: 12px; justify-content: center; margin-top: 8px;">
+    <span class="pill" style="background: #15803d; color: white;">● {{ match.home_club }}</span>
+    <span class="pill" style="background: #b91c1c; color: white;">● {{ match.away_club }}</span>
+  </div>
+</div>
+
+<script>
+// Fetch pitch data and render event dots
+(function() {
+  const matchId = {{ match.id }};
+  fetch(`/api/match/${matchId}/pitch-data`)
+    .then(r => r.json())
+    .then(data => {
+      const dotsContainer = document.getElementById('event-dots');
+      if (!dotsContainer || !data.events) return;
+      data.events.forEach((ev, i) => {
+        const x = (ev.x / 100) * 480 + 10;
+        const y = (ev.y / 100) * 280 + 10;
+        const color = ev.side === 'home' ? '#15803d' : '#b91c1c';
+        const radius = ev.type === 'goal' ? 8 : 5;
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('r', radius);
+        dot.setAttribute('fill', color);
+        dot.setAttribute('stroke', 'white');
+        dot.setAttribute('stroke-width', '1.5');
+        dot.setAttribute('opacity', '0.85');
+        if (ev.type === 'goal') {
+          dot.setAttribute('stroke', '#fbbf24');
+          dot.setAttribute('stroke-width', '3');
+        }
+        // tooltip on hover
+        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        title.textContent = `${ev.minute}' ${ev.type}: ${ev.text}`;
+        dot.appendChild(title);
+        dotsContainer.appendChild(dot);
+      });
+    })
+    .catch(err => console.log('Pitch data fetch failed:', err));
+})();
+</script>
 
 <div class="row">
   <div class="col" style="flex: 3;">
     <div class="card">
-      <h2>Match feed</h2>
+      <div class="section-head">
+        <h2><span class="icon">📡</span> Match feed</h2>
+        <span class="muted small">{{ events|length }} events</span>
+      </div>
       <div class="feed" id="feed">
         {% for ev in events %}
         <div class="event {{ ev.type }}">
-          <span class="minute">{{ ev.minute }}'</span>{{ ev.text }}
+          <span class="minute">{{ ev.minute }}'</span>
+          <span class="icon">
+            {% if ev.type == 'goal' %}⚽
+            {% elif ev.type == 'miss' %}❌
+            {% elif ev.type == 'save' %}🧤
+            {% elif ev.type == 'card' %}🟨
+            {% elif ev.type == 'sub' %}🔁
+            {% elif ev.type == 'injury' %}🩹
+            {% elif ev.type == 'foul' %}🦶
+            {% elif ev.type == 'offside' %}🚩
+            {% elif ev.type == 'free_kick' %}🎯
+            {% elif ev.type == 'chance' %}⚡
+            {% elif ev.type == 'info' %}ℹ
+            {% else %}•{% endif %}
+          </span>
+          <span class="text">{{ ev.text }}</span>
         </div>
         {% endfor %}
       </div>
     </div>
   </div>
   <div class="col" style="flex: 2;">
-    <div class="card">
-      <h2>{{ match.home_club }}</h2>
-      <table class="lineup">
-        <thead><tr><th>Slot</th><th>Player</th><th class="num">CA</th></tr></thead>
-        <tbody>
-        {% for p in home_xi %}
-          <tr>
-            <td class="slot-{{ p.family }}">{{ p.slot }}</td>
-            <td>{{ p.name }}</td>
-            <td class="num">{{ '%.1f' % p.score }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <p class="muted" style="margin-top: 8px; font-size: 12px;">Subs:</p>
-      <table class="lineup">
-        <tbody>
-        {% for p in home_bench %}
-          <tr>
-            <td class="slot-{{ p.family }}">{{ p.family }}</td>
-            <td>{{ p.name }}</td>
-            <td class="num">{{ '%.1f' % p.best_ca }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2 style="margin: 0;">
+            <span class="crest sm" style="margin-right: 6px;">{{ match.home_club[:2]|upper }}</span>
+            {{ match.home_club }}
+          </h2>
+          {% if home_formation %}<span class="badge">{{ home_formation }}</span>{% endif %}
+        </div>
+      </div>
+      <div style="padding: 4px 0;">
+        <div style="padding: 4px 14px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Starting XI</div>
+        <table class="lineup">
+          <thead><tr><th style="width: 70px;">Slot</th><th>Player</th><th class="num">CA</th></tr></thead>
+          <tbody>
+          {% for p in home_xi %}
+            <tr>
+              <td><span class="pos-tag {{ p.family }}">{{ p.slot }}</span></td>
+              <td>{{ p.name }}</td>
+              <td class="num strong">{{ '%.1f' % p.score }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div style="padding: 8px 14px 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Substitutes</div>
+        <table class="lineup">
+          <tbody>
+          {% for p in home_bench %}
+            <tr>
+              <td style="width: 70px;"><span class="pos-tag {{ p.family }}">{{ p.family }}</span></td>
+              <td class="muted">{{ p.name }}</td>
+              <td class="num muted">{{ '%.1f' % p.best_ca }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
   <div class="col" style="flex: 2;">
-    <div class="card">
-      <h2>{{ match.away_club }}</h2>
-      <table class="lineup">
-        <thead><tr><th>Slot</th><th>Player</th><th class="num">CA</th></tr></thead>
-        <tbody>
-        {% for p in away_xi %}
-          <tr>
-            <td class="slot-{{ p.family }}">{{ p.slot }}</td>
-            <td>{{ p.name }}</td>
-            <td class="num">{{ '%.1f' % p.score }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <p class="muted" style="margin-top: 8px; font-size: 12px;">Subs:</p>
-      <table class="lineup">
-        <tbody>
-        {% for p in away_bench %}
-          <tr>
-            <td class="slot-{{ p.family }}">{{ p.family }}</td>
-            <td>{{ p.name }}</td>
-            <td class="num">{{ '%.1f' % p.best_ca }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2 style="margin: 0;">
+            <span class="crest sm" style="margin-right: 6px;">{{ match.away_club[:2]|upper }}</span>
+            {{ match.away_club }}
+          </h2>
+          {% if away_formation %}<span class="badge">{{ away_formation }}</span>{% endif %}
+        </div>
+      </div>
+      <div style="padding: 4px 0;">
+        <div style="padding: 4px 14px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Starting XI</div>
+        <table class="lineup">
+          <thead><tr><th style="width: 70px;">Slot</th><th>Player</th><th class="num">CA</th></tr></thead>
+          <tbody>
+          {% for p in away_xi %}
+            <tr>
+              <td><span class="pos-tag {{ p.family }}">{{ p.slot }}</span></td>
+              <td>{{ p.name }}</td>
+              <td class="num strong">{{ '%.1f' % p.score }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div style="padding: 8px 14px 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Substitutes</div>
+        <table class="lineup">
+          <tbody>
+          {% for p in away_bench %}
+            <tr>
+              <td style="width: 70px;"><span class="pos-tag {{ p.family }}">{{ p.family }}</span></td>
+              <td class="muted">{{ p.name }}</td>
+              <td class="num muted">{{ '%.1f' % p.best_ca }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 
-<div style="margin-top: 16px;">
+<div class="btn-group">
   <a href="/season/{{ match.season_id }}" class="btn secondary">← Back to season</a>
 </div>
+
 {% endblock %}

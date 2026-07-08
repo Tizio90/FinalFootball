@@ -39,6 +39,29 @@ from sim.season import (
     get_divisions_by_nation, get_nations,
     run_season, init_persistence,
 )
+from sim.career import (
+    record_injuries_from_match, get_injured_players, decrement_injury_counters,
+    filter_injured_from_squad, update_morale_after_match,
+    compute_season_summary, get_transfer_budget, evaluate_transfer_bid,
+    execute_transfer, get_signings_count,
+    generate_cup_fixtures, get_pending_cup_fixtures, play_cup_round,
+    get_cup_results,
+)
+from sim.phase3 import (
+    run_phase3_migrations, progress_squad, generate_youth_intake,
+    get_roles_for_family, apply_role_modifiers, get_team_instructions_defaults,
+    TEAM_INSTRUCTIONS, PLAYER_ROLES,
+    generate_staff_candidates, hire_staff, fire_staff, get_club_staff, get_staff_bonus,
+    STAFF_ROLES, TRAINING_FOCI, TRAINING_INTENSITIES,
+    compute_finances, compute_club_wage_bill, compute_player_wage,
+    set_board_expectation, get_board_confidence, update_board_confidence,
+    scout_player, is_player_scouted, get_scouting_accuracy, get_scouted_players,
+    generate_press_conference, save_press_conference, PRESS_QUESTIONS,
+    check_player_concerns, resolve_concern, get_active_concerns,
+    get_player_happiness, happiness_label,
+    get_fan_confidence,
+    add_news, get_news, generate_match_news, simulate_ai_transfers,
+)
 
 import sqlite3
 import datetime as dt
@@ -385,12 +408,23 @@ def career_view(career_id: str):
     career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
     if career is None:
         conn.close()
-        abort(404)
+        # helpful error instead of bare 404
+        return render_template("error.html",
+                              error_title="Career not found",
+                              error_message=(f"No career with ID <code>{career_id}</code> exists. "
+                                             "This usually happens after re-ingesting the database "
+                                             "(which wipes saved careers). "
+                                             "<a href='/career/new'>Start a new career</a> or "
+                                             "<a href='/'>go home</a>.")), 404
     season = conn.execute("SELECT * FROM seasons WHERE id = ?",
                          (career["season_id"],)).fetchone()
     if season is None:
         conn.close()
-        abort(404)
+        return render_template("error.html",
+                              error_title="Season not found",
+                              error_message=(f"The season for this career no longer exists. "
+                                             "This usually happens after re-ingesting the database. "
+                                             "<a href='/career/new'>Start a new career</a>.")), 404
     clubs = json.loads(season["clubs_json"])
     from sim.season import Standings
     standings = Standings(clubs)
@@ -415,12 +449,27 @@ def career_view(career_id: str):
     user_results = [m for m in matches
                     if m["home_club"] == career["club"] or m["away_club"] == career["club"]]
     user_results = user_results[-5:]
+    # 2B-2: injured players for the user's club
+    injured_players = get_injured_players(conn, season["id"], club=career["club"])
+    # 2B-3: signings count + cup status
+    signings = get_signings_count(conn, career_id, season["id"])
+    cup_count = conn.execute(
+        "SELECT COUNT(*) as n FROM cup_fixtures WHERE season_id = ?",
+        (season["id"],)
+    ).fetchone()["n"]
+    cup_pending = conn.execute(
+        "SELECT COUNT(*) as n FROM cup_fixtures WHERE season_id = ? AND played = 0",
+        (season["id"],)
+    ).fetchone()["n"]
     conn.close()
     return render_template("career.html", career=career, season=season,
                           standings=standings.sorted_rows(),
                           rounds_played=rounds_played, total_rounds=total_rounds,
                           user_next=user_next, next_round=next_round,
-                          user_results=user_results)
+                          user_results=user_results,
+                          injured_players=injured_players,
+                          signings=signings, max_signings=3,
+                          cup_count=cup_count, cup_pending=cup_pending)
 
 
 @app.route("/career/<career_id>/tactics", methods=["GET", "POST"])
@@ -512,6 +561,8 @@ def career_play_next(career_id: str):
     cache = {}
     for c in clubs:
         squad = load_club_squad(conn, c)
+        # 2B-2: filter out injured players
+        squad = filter_injured_from_squad(squad, conn, season["id"])
         formation = pick_formation_for_squad(squad)
         xi, bench = pick_best_xi(squad, conn, formation=formation)
         cache[c] = (xi, bench, formation)
@@ -523,13 +574,16 @@ def career_play_next(career_id: str):
     manual_bench_json = json.loads(career["manual_bench_json"]) if career["manual_bench_json"] else None
     if manual_xi_json and len(manual_xi_json) == 11:
         user_squad = load_club_squad(conn, user_club)
+        user_squad = filter_injured_from_squad(user_squad, conn, season["id"])
         user_xi, user_bench = pick_manual_xi(user_squad, conn, user_formation,
                                              manual_xi_json, manual_bench_json)
     else:
         user_squad = load_club_squad(conn, user_club)
+        user_squad = filter_injured_from_squad(user_squad, conn, season["id"])
         user_xi, user_bench = pick_best_xi(user_squad, conn, formation=user_formation)
     cache[user_club] = (user_xi, user_bench, user_formation)
 
+    clubs_played = []
     for home, away in round_fixtures:
         if home not in cache or away not in cache:
             continue
@@ -553,6 +607,16 @@ def career_play_next(career_id: str):
                  "player_names": e.player_names,
              } for e in result.events])),
         )
+        # 2B-2: record injuries + update morale after each match
+        record_injuries_from_match(conn, result, career_id, season["id"], next_round)
+        update_morale_after_match(conn, result, season["id"])
+        if home not in clubs_played:
+            clubs_played.append(home)
+        if away not in clubs_played:
+            clubs_played.append(away)
+
+    # 2B-2: decrement injury counters for clubs that played this round
+    decrement_injury_counters(conn, season["id"], clubs_played)
     conn.commit()
     conn.close()
     return redirect(url_for("career_view", career_id=career_id))
@@ -584,6 +648,8 @@ def career_sim_rest(career_id: str):
     cache = {}
     for c in clubs:
         squad = load_club_squad(conn, c)
+        # 2B-2: filter out injured players
+        squad = filter_injured_from_squad(squad, conn, season["id"])
         formation = pick_formation_for_squad(squad)
         xi, bench = pick_best_xi(squad, conn, formation=formation)
         cache[c] = (xi, bench, formation)
@@ -595,15 +661,18 @@ def career_sim_rest(career_id: str):
     manual_bench_json = json.loads(career["manual_bench_json"]) if career["manual_bench_json"] else None
     if manual_xi_json and len(manual_xi_json) == 11:
         user_squad = load_club_squad(conn, user_club)
+        user_squad = filter_injured_from_squad(user_squad, conn, season["id"])
         user_xi, user_bench = pick_manual_xi(user_squad, conn, user_formation,
                                              manual_xi_json, manual_bench_json)
     else:
         user_squad = load_club_squad(conn, user_club)
+        user_squad = filter_injured_from_squad(user_squad, conn, season["id"])
         user_xi, user_bench = pick_best_xi(user_squad, conn, formation=user_formation)
     cache[user_club] = (user_xi, user_bench, user_formation)
 
     for r_idx in range(rounds_played + 1, season["rounds"] + 1):
         round_fixtures = fixtures[r_idx - 1]
+        clubs_played = []
         for home, away in round_fixtures:
             if home not in cache or away not in cache:
                 continue
@@ -627,9 +696,568 @@ def career_sim_rest(career_id: str):
                      "player_names": e.player_names,
                  } for e in result.events])),
             )
+            # 2B-2: record injuries + update morale
+            record_injuries_from_match(conn, result, career_id, season["id"], r_idx)
+            update_morale_after_match(conn, result, season["id"])
+            if home not in clubs_played:
+                clubs_played.append(home)
+            if away not in clubs_played:
+                clubs_played.append(away)
+        # decrement injury counters after each round
+        decrement_injury_counters(conn, season["id"], clubs_played)
         conn.commit()
     conn.close()
     return redirect(url_for("career_view", career_id=career_id))
+
+
+# ---------------------------------------------------------------------------
+# Season review (2B-2)
+# ---------------------------------------------------------------------------
+
+@app.route("/career/<career_id>/season/<season_id>/review")
+def career_season_review(career_id: str, season_id: str):
+    """Season summary: top scorers, assists, standings, user's record."""
+    conn = get_db()
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    summary = compute_season_summary(conn, season_id, user_club=career["club"])
+    # cup results
+    cup_results = get_cup_results(conn, season_id)
+    conn.close()
+    return render_template("season_review.html", career=career,
+                          season_id=season_id, summary=summary,
+                          cup_results=cup_results)
+
+
+# ---------------------------------------------------------------------------
+# Transfer market (2B-3)
+# ---------------------------------------------------------------------------
+
+@app.route("/career/<career_id>/transfers", methods=["GET", "POST"])
+def career_transfers(career_id: str):
+    """Transfer market: search all 87k players, bid on any."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    user_club = career["club"]
+    season_id = career["season_id"]
+    budget = get_transfer_budget(conn, user_club)
+    signings = get_signings_count(conn, career_id, season_id)
+    max_signings = 3
+    bid_result = None
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "search":
+            # search players by name/club/nation with filters
+            name = request.form.get("name", "").strip()
+            club_filter = request.form.get("club", "").strip()
+            position = request.form.get("position", "")
+            min_ca = int(request.form.get("min_ca", 0))
+            max_value = int(request.form.get("max_value", 0))
+
+            query = """
+                SELECT p.uid, p.name, p.club, p.nationality, p.position_raw,
+                       p.transfer_value, p.primary_family, p.age,
+                       p.preferred_foot
+                FROM players p
+                WHERE p.club != ?
+            """
+            params = [user_club]
+            if name:
+                query += " AND p.name LIKE ?"
+                params.append(f"%{name}%")
+            if club_filter:
+                query += " AND p.club LIKE ?"
+                params.append(f"%{club_filter}%")
+            if position:
+                query += " AND p.primary_family = ?"
+                params.append(position)
+            if max_value > 0:
+                query += " AND (p.transfer_value <= ? OR p.transfer_value = -1)"
+                params.append(max_value)
+
+            query += " ORDER BY p.transfer_value DESC LIMIT 50"
+            results = conn.execute(query, params).fetchall()
+
+            # compute CA for each result
+            from engine.attributes import ca_for_family, load_player_attrs
+            players = []
+            for r in results:
+                attrs = load_player_attrs(conn, r["uid"])
+                fam = r["primary_family"] or "MID"
+                ca = ca_for_family(attrs, fam) or 0
+                if ca >= min_ca:
+                    players.append({
+                        "uid": r["uid"], "name": r["name"], "club": r["club"],
+                        "position": r["position_raw"], "value": r["transfer_value"],
+                        "age": r["age"], "ca": round(ca, 1),
+                        "nationality": r["nationality"],
+                    })
+            conn.close()
+            return render_template("transfers.html", career=career, budget=budget,
+                                  signings=signings, max_signings=max_signings,
+                                  search_results=players, bid_result=None)
+
+        elif action == "bid":
+            if signings >= max_signings:
+                bid_result = {"accepted": False,
+                             "reason": f"Transfer limit reached ({max_signings} signings per window)"}
+            else:
+                player_uid = int(request.form.get("player_uid"))
+                bid_amount = int(request.form.get("bid_amount", 0))
+                result = evaluate_transfer_bid(conn, player_uid, user_club, bid_amount)
+                if result["accepted"]:
+                    execute_transfer(conn, player_uid, user_club, bid_amount,
+                                    career_id, season_id)
+                    clear_lineup_cache(user_club)
+                    bid_result = {"accepted": True,
+                                 "reason": f"✓ {result['player_name']} signed for ${bid_amount:,}!"}
+                else:
+                    bid_result = {"accepted": False, "reason": result["reason"]}
+
+    # GET: show empty search form
+    budget = get_transfer_budget(conn, user_club)
+    signings = get_signings_count(conn, career_id, season_id)
+    conn.close()
+    return render_template("transfers.html", career=career, budget=budget,
+                          signings=signings, max_signings=max_signings,
+                          search_results=None, bid_result=bid_result)
+
+
+# ---------------------------------------------------------------------------
+# Cup competition (2B-3)
+# ---------------------------------------------------------------------------
+
+@app.route("/career/<career_id>/cup")
+def career_cup(career_id: str):
+    """View cup fixtures and results."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season_id = career["season_id"]
+    pending = get_pending_cup_fixtures(conn, season_id)
+    played = get_cup_results(conn, season_id)
+    # check if cup has been generated yet
+    cup_exists = conn.execute(
+        "SELECT COUNT(*) as n FROM cup_fixtures WHERE season_id = ?",
+        (season_id,)
+    ).fetchone()["n"] > 0
+    conn.close()
+    return render_template("cup.html", career=career, pending=pending,
+                          played=played, cup_exists=cup_exists)
+
+
+@app.route("/career/<career_id>/cup/generate", methods=["POST"])
+def career_cup_generate(career_id: str):
+    """Generate the cup draw for this season."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season_id = career["season_id"]
+    # check if already generated
+    existing = conn.execute(
+        "SELECT COUNT(*) as n FROM cup_fixtures WHERE season_id = ?",
+        (season_id,)
+    ).fetchone()["n"]
+    if existing == 0:
+        season = conn.execute("SELECT * FROM seasons WHERE id = ?", (season_id,)).fetchone()
+        clubs = json.loads(season["clubs_json"])
+        # take top 32 clubs (or fewer if the league is smaller)
+        # sort by squad size as a proxy for quality
+        clubs_sorted = sorted(clubs, key=lambda c: conn.execute(
+            "SELECT player_count FROM clubs WHERE name = ?", (c,)
+        ).fetchone()["player_count"], reverse=True)
+        generate_cup_fixtures(conn, career_id, season_id, clubs_sorted[:32])
+    conn.close()
+    return redirect(url_for("career_cup", career_id=career_id))
+
+
+@app.route("/career/<career_id>/cup/play", methods=["POST"])
+def career_cup_play(career_id: str):
+    """Play the next pending cup round."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    season_id = career["season_id"]
+    play_cup_round(conn, season_id, career_id,
+                   user_club=career["club"],
+                   user_formation=career["formation"],
+                   user_mentality=career["mentality"])
+    conn.close()
+    return redirect(url_for("career_cup", career_id=career_id))
+
+
+# ===========================================================================
+# Phase 3 routes — Staff, Training, Finances, Scouting, Press, News
+# ===========================================================================
+
+@app.route("/career/<career_id>/staff", methods=["GET", "POST"])
+def career_staff(career_id: str):
+    """Staff management page: hire/fire coaches, scouts, physios."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "hire":
+            name = request.form.get("name")
+            role = request.form.get("role")
+            rating = int(request.form.get("rating", 50))
+            wage = int(request.form.get("wage", 50000))
+            hire_staff(conn, career_id, name, role, rating, wage)
+        elif action == "fire":
+            staff_id = int(request.form.get("staff_id"))
+            fire_staff(conn, staff_id)
+        conn.close()
+        return redirect(url_for("career_staff", career_id=career_id))
+
+    # GET: show current staff + candidates
+    current_staff = get_club_staff(conn, career_id)
+    candidates = generate_staff_candidates(6)
+    total_wages = sum(s["wage"] for s in current_staff)
+    conn.close()
+    return render_template("staff.html", career=career, staff=current_staff,
+                          candidates=candidates, staff_roles=STAFF_ROLES,
+                          total_wages=total_wages)
+
+
+@app.route("/career/<career_id>/training", methods=["GET", "POST"])
+def career_training(career_id: str):
+    """Training settings: focus + intensity."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    if request.method == "POST":
+        focus = request.form.get("focus", "general")
+        intensity = request.form.get("intensity", "standard")
+        import datetime as dt_mod
+        conn.execute(
+            "UPDATE careers SET manual_bench_json = manual_bench_json, updated_at = ? WHERE id = ?",
+            (dt_mod.datetime.now().isoformat(), career_id),
+        )
+        # store training settings in a separate column or as JSON in manual_xi_json
+        # for simplicity, store in a new careers column via ALTER TABLE
+        try:
+            conn.execute("ALTER TABLE careers ADD COLUMN training_focus TEXT DEFAULT 'general'")
+            conn.execute("ALTER TABLE careers ADD COLUMN training_intensity TEXT DEFAULT 'standard'")
+        except sqlite3.OperationalError:
+            pass  # columns already exist
+        conn.execute(
+            "UPDATE careers SET training_focus = ?, training_intensity = ? WHERE id = ?",
+            (focus, intensity, career_id),
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("career_training", career_id=career_id))
+
+    # GET: show current training settings
+    try:
+        focus = career["training_focus"] if "training_focus" in career.keys() else "general"
+        intensity = career["training_intensity"] if "training_intensity" in career.keys() else "standard"
+    except (KeyError, IndexError):
+        focus = "general"
+        intensity = "standard"
+    staff_bonus = get_staff_bonus(conn, career_id)
+    conn.close()
+    return render_template("training.html", career=career, foci=TRAINING_FOCI,
+                          intensities=TRAINING_INTENSITIES,
+                          current_focus=focus, current_intensity=intensity,
+                          staff_bonus=staff_bonus)
+
+
+@app.route("/career/<career_id>/finances")
+def career_finances(career_id: str):
+    """Finances page: income, expenses, balance."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    season_id = career["season_id"]
+    club = career["club"]
+    # compute current finances (simplified — no final position yet)
+    finances = compute_finances(conn, career_id, season_id, club, total_clubs=20)
+    wage_bill = compute_club_wage_bill(conn, club)
+    staff = get_club_staff(conn, career_id)
+    staff_wages = sum(s["wage"] for s in staff)
+    board_conf = get_board_confidence(conn, career_id, season_id)
+    conn.close()
+    return render_template("finances.html", career=career, finances=finances,
+                          wage_bill=wage_bill, staff=staff, staff_wages=staff_wages,
+                          board_confidence=board_conf)
+
+
+@app.route("/career/<career_id>/youth")
+def career_youth(career_id: str):
+    """Youth academy page: current intake + generate new intake."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    season_id = career["season_id"]
+    # get this season's intake
+    intake = conn.execute(
+        "SELECT yi.*, p.name, p.age, p.position_raw, p.primary_family, p.preferred_foot "
+        "FROM youth_intake yi JOIN players p ON yi.player_uid = p.uid "
+        "WHERE yi.career_id = ? AND yi.season_id = ? ORDER BY p.name",
+        (career_id, season_id),
+    ).fetchall()
+    conn.close()
+    return render_template("youth.html", career=career, intake=intake)
+
+
+@app.route("/career/<career_id>/youth/generate", methods=["POST"])
+def career_youth_generate(career_id: str):
+    """Generate a youth intake for this season."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    season_id = career["season_id"]
+    club = career["club"]
+    # check if already generated this season
+    existing = conn.execute(
+        "SELECT COUNT(*) as n FROM youth_intake WHERE career_id = ? AND season_id = ?",
+        (career_id, season_id),
+    ).fetchone()["n"]
+    if existing == 0:
+        # determine division quality
+        club_row = conn.execute(
+            "SELECT d.player_count FROM clubs c JOIN divisions d ON c.division_id = d.id WHERE c.name = ?",
+            (club,)
+        ).fetchone()
+        div_quality = min(80, (club_row["player_count"] or 500) // 20) if club_row else 60
+        newgens = generate_youth_intake(conn, club, season_id, career_id,
+                                        dt.datetime.now().year, div_quality)
+        add_news(conn, career_id, season_id, 0, "youth",
+                 f"Youth intake: {len(newgens)} new players",
+                 f"The youth academy has produced {len(newgens)} new prospects.")
+    conn.close()
+    return redirect(url_for("career_youth", career_id=career_id))
+
+
+@app.route("/career/<career_id>/scouting", methods=["GET", "POST"])
+def career_scouting(career_id: str):
+    """Scouting page: view scouted players + scout new ones."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    if request.method == "POST":
+        player_uid = int(request.form.get("player_uid"))
+        # find the best scout
+        staff = get_club_staff(conn, career_id)
+        scout_rating = 50
+        for s in staff:
+            if s["role"] == "scout":
+                scout_rating = max(scout_rating, s["rating"])
+        scout_player(conn, career_id, player_uid, scout_rating)
+        conn.close()
+        return redirect(url_for("career_scouting", career_id=career_id))
+
+    scouted = get_scouted_players(conn, career_id)
+    conn.close()
+    return render_template("scouting.html", career=career, scouted=scouted)
+
+
+@app.route("/career/<career_id>/news")
+def career_news(career_id: str):
+    """News feed for the career."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+    news = get_news(conn, career_id, limit=30)
+    conn.close()
+    return render_template("news.html", career=career, news=news)
+
+
+@app.route("/career/<career_id>/interactions", methods=["GET", "POST"])
+def career_interactions(career_id: str):
+    """Player interactions: view + resolve concerns."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    if request.method == "POST":
+        concern_id = int(request.form.get("concern_id"))
+        resolution = request.form.get("resolution")
+        # apply resolution effects
+        concern = conn.execute(
+            "SELECT * FROM player_concerns WHERE id = ?", (concern_id,)
+        ).fetchone()
+        if concern:
+            if resolution == "promise_playing_time":
+                # boost morale
+                conn.execute(
+                    "UPDATE players SET morale = MIN(100, morale + 15) WHERE uid = ?",
+                    (concern["player_uid"],),
+                )
+            elif resolution == "fine":
+                conn.execute(
+                    "UPDATE players SET morale = MAX(0, morale - 10) WHERE uid = ?",
+                    (concern["player_uid"],),
+                )
+            elif resolution == "sell":
+                # mark for transfer (simplified — just resolve)
+                pass
+            elif resolution == "ignore":
+                conn.execute(
+                    "UPDATE players SET morale = MAX(0, morale - 5) WHERE uid = ?",
+                    (concern["player_uid"],),
+                )
+            resolve_concern(conn, concern_id, resolution)
+        conn.close()
+        return redirect(url_for("career_interactions", career_id=career_id))
+
+    concerns = get_active_concerns(conn, career_id)
+    conn.close()
+    return render_template("interactions.html", career=career, concerns=concerns)
+
+
+@app.route("/career/<career_id>/progress-season", methods=["POST"])
+def career_progress_season(career_id: str):
+    """End-of-season: progress all players' attributes + generate youth intake."""
+    conn = get_db()
+    init_persistence(conn)
+    career = conn.execute("SELECT * FROM careers WHERE id = ?", (career_id,)).fetchone()
+    if career is None:
+        conn.close()
+        abort(404)
+
+    season_id = career["season_id"]
+    club = career["club"]
+    # get training settings
+    try:
+        focus = career["training_focus"] if "training_focus" in career.keys() else "general"
+        intensity = career["training_intensity"] if "training_intensity" in career.keys() else "standard"
+    except (KeyError, IndexError):
+        focus = "general"
+        intensity = "standard"
+
+    staff_bonus = get_staff_bonus(conn, career_id)
+    # progress all players
+    results = progress_squad(conn, club, season_id, career_id, focus, intensity, staff_bonus)
+    # generate youth intake
+    club_row = conn.execute(
+        "SELECT d.player_count FROM clubs c JOIN divisions d ON c.division_id = d.id WHERE c.name = ?",
+        (club,)
+    ).fetchone()
+    div_quality = min(80, (club_row["player_count"] or 500) // 20) if club_row else 60
+    newgens = generate_youth_intake(conn, club, season_id, career_id,
+                                    dt.datetime.now().year, div_quality)
+    # add news
+    improved = sum(1 for r in results if r["delta"] > 0)
+    declined = sum(1 for r in results if r["delta"] < 0)
+    add_news(conn, career_id, season_id, 0, "development",
+             f"Season progression: {improved} improved, {declined} declined",
+             f"{len(newgens)} youth players joined the academy.")
+    conn.close()
+    return redirect(url_for("career_view", career_id=career_id))
+
+
+# ===========================================================================
+# Phase 3D: 2D pitch + radar charts (data endpoints)
+# ===========================================================================
+
+@app.route("/api/match/<int:match_id>/pitch-data")
+def api_pitch_data(match_id: int):
+    """Return pitch position data for 2D match visualization."""
+    conn = get_db()
+    m = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+    if m is None:
+        conn.close()
+        return jsonify({"error": "not found"}), 404
+    events = json.loads(m["events_json"])
+    # assign positions based on event minute + side
+    pitch_events = []
+    for ev in events:
+        if ev["type"] in ("goal", "shot", "save", "miss", "chance", "foul", "card"):
+            # simple position: home events on left, away on right
+            x = 25 if ev["side"] == "home" else 75
+            y = 50 + (hash(ev["minute"]) % 40 - 20)  # pseudo-random y
+            pitch_events.append({
+                "minute": ev["minute"], "type": ev["type"],
+                "side": ev["side"], "text": ev["text"],
+                "x": x, "y": y,
+            })
+    conn.close()
+    return jsonify({
+        "home_club": m["home_club"], "away_club": m["away_club"],
+        "home_score": m["home_score"], "away_score": m["away_score"],
+        "events": pitch_events,
+    })
+
+
+@app.route("/api/player/<int:uid>/radar")
+def api_player_radar(uid: int):
+    """Return attribute data for radar chart visualization."""
+    conn = get_db()
+    from engine.attributes import load_player_attrs
+    attrs = load_player_attrs(conn, uid)
+    player = conn.execute("SELECT name, primary_family FROM players WHERE uid = ?", (uid,)).fetchone()
+    conn.close()
+    if not player:
+        return jsonify({"error": "not found"}), 404
+    # group attributes into 6 categories
+    categories = {
+        "Technical": ["Tec", "Pas", "Dri", "Fin", "Cro", "Cor"],
+        "Mental": ["Dec", "Ant", "Cmp", "Vis", "OtB", "Tea"],
+        "Physical": ["Pac", "Acc", "Agi", "Bal", "Sta", "Str"],
+        "Defending": ["Tck", "Mar", "Pos", "Hea", "Jum", "Cnt"],
+        "Attacking": ["Fin", "Dri", "Fla", "OtB", "Acc", "Pac"],
+        "Goalkeeping": ["Ref", "Han", "1v1", "Aer", "Cmd", "Pos"],
+    }
+    radar_data = {}
+    for cat, attr_list in categories.items():
+        vals = [attrs.get(a) for a in attr_list if attrs.get(a) is not None]
+        radar_data[cat] = sum(vals) / len(vals) if vals else 0
+    return jsonify({
+        "name": player["name"],
+        "family": player["primary_family"],
+        "data": radar_data,
+        "attrs": {k: v for k, v in attrs.items() if v is not None and k != "uid"},
+    })
 
 
 @app.route("/season/new", methods=["POST"])

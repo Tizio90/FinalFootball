@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Player Interactions — {{ career.club }}{% endblock %}
+{% block content %}
+
+{% set concern_meta = {
+  "playing_time": {"icon": "⏱", "label": "Playing time", "cls": "amber"},
+  "ambition":     {"icon": "🚀", "label": "Ambition",     "cls": "blue"},
+  "unhappy":      {"icon": "😠", "label": "Unhappy",      "cls": "red"}
+} %}
+
+{% set resolution_meta = {
+  "promise_playing_time": {"icon": "🤝", "label": "Promise playing time", "color": "var(--accent)", "hint": "+15 morale · risk if you don't follow through"},
+  "fine":                 {"icon": "💸", "label": "Fine player",           "color": "#b45309",       "hint": "-10 morale · sends a strong message"},
+  "sell":                 {"icon": "🏷", "label": "List for transfer",     "color": "#7c3aed",       "hint": "Mark as available · reduces disruption"},
+  "ignore":               {"icon": "🚫", "label": "Ignore",               "color": "var(--card-r)", "hint": "-5 morale · concern lingers"}
+} %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Interactions</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">💬 Player Interactions</h1>
+      <div class="sub">{{ career.club }} · resolve concerns from players about playing time, ambition and happiness</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v">{{ concerns|length }}</div>
+      <div class="l">Active concerns</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{{ concerns|selectattr('concern_type', 'equalto', 'playing_time')|list|length }}</div>
+      <div class="l">Playing time</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ concerns|selectattr('concern_type', 'equalto', 'ambition')|list|length }}</div>
+      <div class="l">Ambition</div>
+    </div>
+    <div class="kpi">
+      <div class="v" style="color: var(--card-r);">{{ concerns|selectattr('concern_type', 'equalto', 'unhappy')|list|length }}</div>
+      <div class="l">Unhappy</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">💬</span> Active player concerns</h2>
+    {% if concerns %}<span class="pill red">{{ concerns|length }} need attention</span>{% else %}<span class="pill green">All clear</span>{% endif %}
+  </div>
+
+  {% if concerns %}
+  <div class="stack" style="gap: 14px;">
+    {% for c in concerns %}
+      {% set meta = concern_meta.get(c.concern_type, {"icon": "❓", "label": c.concern_type|title, "cls": ""}) %}
+      <div style="border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: #fff;
+                  border-left: 4px solid
+                  {% if c.concern_type == 'playing_time' %}#f59e0b
+                  {% elif c.concern_type == 'ambition' %}#1d4ed8
+                  {% elif c.concern_type == 'unhappy' %}var(--card-r)
+                  {% else %}var(--border-strong){% endif %};">
+        <div style="padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div style="flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--r);
+                      display: flex; align-items: center; justify-content: center;
+                      font-size: 22px; background: var(--bg-soft); border: 1px solid var(--border);">
+            {{ meta.icon }}
+          </div>
+          <div style="flex: 1; min-width: 240px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+              <span class="strong" style="font-size: 15px; color: var(--primary);">{{ c.player_name }}</span>
+              <span class="pill {{ meta.cls }}">{{ meta.label }}</span>
+              <span class="muted small">UID {{ c.player_uid }}</span>
+            </div>
+            <div class="muted" style="font-size: 13px; line-height: 1.5;">
+              {{ c.concern_text }}
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 0 16px 14px; border-top: 1px dashed var(--border); padding-top: 12px;">
+          <div class="muted small" style="text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 8px;">
+            Choose a resolution
+          </div>
+          <div class="grid-4" style="gap: 8px;">
+            {% for res_key, res_meta in resolution_meta.items() %}
+              <form action="/career/{{ career.id }}/interactions" method="post" style="margin: 0;">
+                <input type="hidden" name="concern_id" value="{{ c.id }}">
+                <input type="hidden" name="resolution" value="{{ res_key }}">
+                <button type="submit"
+                        style="width: 100%; padding: 10px; cursor: pointer;
+                               border: 1px solid var(--border); border-radius: var(--r);
+                               background: #fff; font-family: var(--font-body);
+                               text-align: left; transition: all .15s ease;
+                               display: flex; flex-direction: column; gap: 4px;"
+                        onmouseover="this.style.borderColor='{{ res_meta.color }}'; this.style.background='var(--bg-soft)';"
+                        onmouseout="this.style.borderColor='var(--border)'; this.style.background='#fff';">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 16px;">{{ res_meta.icon }}</span>
+                    <span class="strong" style="font-size: 12px; color: {{ res_meta.color }};">{{ res_meta.label }}</span>
+                  </div>
+                  <div class="muted" style="font-size: 10.5px; line-height: 1.4;">{{ res_meta.hint }}</div>
+                </button>
+              </form>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="icon">✅</div>
+    <div>No active concerns right now.</div>
+    <div class="muted small" style="margin-top: 6px;">
+      Keep an eye on morale and playing time — concerns appear when players are benched for 3+ matches,
+      have low morale, or want to leave for a bigger club. <a href="/career/{{ career.id }}">Play matches</a> to trigger concern checks.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📖</span> How concerns work</h2>
+  </div>
+  <div class="grid-3" style="gap: 12px;">
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid #f59e0b;">
+      <div style="font-size: 22px; margin-bottom: 6px;">⏱</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Playing time</div>
+      <div class="muted small">Raised when a player is benched for 3+ matches. Promise them minutes or list them for transfer to resolve.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid #1d4ed8;">
+      <div style="font-size: 22px; margin-bottom: 6px;">🚀</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Ambition</div>
+      <div class="muted small">Raised by young, ambitious players at underperforming clubs. They want to leave for a bigger stage — sell or convince them to stay.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid var(--card-r);">
+      <div style="font-size: 22px; margin-bottom: 6px;">😠</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Unhappy</div>
+      <div class="muted small">Triggered when morale drops below 30 for 5+ matches. Address the root cause or risk the player disrupting the squad.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section-head">
+    <h2 style="font-size: 14px;"><span class="icon">⚖️</span> Resolution effects</h2>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 30px;"></th>
+        <th>Resolution</th>
+        <th>Effect</th>
+        <th>Best when</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for res_key, res_meta in resolution_meta.items() %}
+      <tr>
+        <td style="font-size: 18px;">{{ res_meta.icon }}</td>
+        <td class="strong" style="color: {{ res_meta.color }};">{{ res_meta.label }}</td>
+        <td class="muted">{{ res_meta.hint }}</td>
+        <td class="muted small">
+          {% if res_key == 'promise_playing_time' %}You can give the player minutes
+          {% elif res_key == 'fine' %}Player is repeatedly disruptive
+          {% elif res_key == 'sell' %}Player wants out and won't stay
+          {% elif res_key == 'ignore' %}Concern is minor or you'll deal with it later{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/news" class="btn secondary">📰 News feed</a>
+  <a href="/career/{{ career.id }}/tactics" class="btn secondary">⚽ Adjust lineup</a>
+</div>
+
+{% endblock %}

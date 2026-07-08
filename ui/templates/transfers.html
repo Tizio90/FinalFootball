@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Transfers — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Transfers</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">💰 Transfer Market</h1>
+      <div class="sub">{{ career.club }} · search 87,000+ players and bid for new talent</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v accent">${{ budget|toLocale }}</div>
+      <div class="l">Transfer budget</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ signings }} / {{ max_signings }}</div>
+      <div class="l">Signings this window</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{% if signings < max_signings %}Open{% else %}Closed{% endif %}</div>
+      <div class="l">Window status</div>
+    </div>
+  </div>
+
+  {% if bid_result %}
+  <div class="alert {% if bid_result.accepted %}success{% else %}error{% endif %}" style="margin-top: 14px;">
+    <span class="icon">{% if bid_result.accepted %}✓{% else %}✗{% endif %}</span>
+    <div>
+      <strong>{% if bid_result.accepted %}Bid accepted{% else %}Bid rejected{% endif %}</strong><br>
+      {{ bid_result.reason }}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🔍</span> Search players</h2>
+  </div>
+  <form action="/career/{{ career.id }}/transfers" method="post">
+    <input type="hidden" name="action" value="search">
+    <div class="form-row-flex" style="margin-bottom: 18px;">
+      <div>
+        <label>Name</label>
+        <input type="text" name="name" placeholder="e.g. Messi" style="width: 160px;">
+      </div>
+      <div>
+        <label>Club</label>
+        <input type="text" name="club" placeholder="e.g. Barcelona" style="width: 160px;">
+      </div>
+      <div>
+        <label>Position</label>
+        <select name="position">
+          <option value="">Any</option>
+          <option value="GK">GK</option>
+          <option value="DEF">DEF</option>
+          <option value="MID">MID</option>
+          <option value="ATT">ATT</option>
+        </select>
+      </div>
+      <div>
+        <label>Min CA</label>
+        <input type="number" name="min_ca" value="0" min="0" max="100" style="width: 90px;">
+      </div>
+      <div>
+        <label>Max value ($)</label>
+        <input type="number" name="max_value" value="0" min="0" style="width: 130px;" placeholder="0 = any">
+      </div>
+      <button type="submit" class="btn">🔍 Search</button>
+    </div>
+  </form>
+
+  {% if search_results is not none %}
+    <div class="divider"></div>
+    <div class="section-head">
+      <h2><span class="icon">📋</span> Search results <span class="sub">({{ search_results|length }})</span></h2>
+      {% if search_results|length == 50 %}<span class="pill amber">Limited to 50 — refine filters</span>{% endif %}
+    </div>
+    {% if search_results|length > 0 %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Club</th>
+          <th>Pos</th>
+          <th class="num">Age</th>
+          <th class="num">CA</th>
+          <th>Value</th>
+          <th>Bid</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in search_results %}
+        <tr>
+          <td style="font-weight: 600;">{{ p.name }}</td>
+          <td class="muted">{{ p.club }}</td>
+          <td><span class="pos-tag {{ p.position }}">{{ p.position }}</span></td>
+          <td class="num muted">{{ p.age }}</td>
+          <td class="num strong">{{ p.ca }}</td>
+          <td>
+            {% if p.value == -1 %}<span class="pill red">Not for Sale</span>
+            {% elif p.value > 0 %}<span class="strong">${{ p.value|toLocale }}</span>
+            {% else %}<span class="pill green">Free</span>{% endif %}
+          </td>
+          <td>
+            {% if signings < max_signings and p.value != -1 %}
+            <form action="/career/{{ career.id }}/transfers" method="post" class="inline" style="display: inline-flex; gap: 4px; align-items: center;">
+              <input type="hidden" name="action" value="bid">
+              <input type="hidden" name="player_uid" value="{{ p.uid }}">
+              <input type="number" name="bid_amount" value="{{ p.value if p.value > 0 else 500000 }}"
+                     min="0" style="width: 100px; font-size: 12px; padding: 4px 8px;">
+              <button type="submit" class="btn small">💰 Bid</button>
+            </form>
+            {% elif p.value == -1 %}
+            <span class="muted small">—</span>
+            {% else %}
+            <span class="pill amber">Limit reached</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <div class="icon">🔍</div>
+      <div>No players found. Try adjusting your filters.</div>
+    </div>
+    {% endif %}
+  {% else %}
+    <div class="empty">
+      <div class="icon">📊</div>
+      <div>Use the form above to search all 87,000+ players.</div>
+      <div class="muted small" style="margin-top: 6px;">Filter by name, club, position, minimum CA, or maximum value.</div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+</div>
+
+{% endblock %}

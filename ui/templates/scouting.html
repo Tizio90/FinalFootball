@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Scouting — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Scouting</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">🔍 Scouting</h1>
+      <div class="sub">{{ career.club }} · reveal player attributes by scouting them with your staff</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  {% set ns = namespace(total_acc=0, max_acc=0, min_acc=100, count=scouted|length) %}
+  {% for p in scouted %}
+    {% set ns.total_acc = ns.total_acc + (p.accuracy or 0) %}
+    {% if (p.accuracy or 0) > ns.max_acc %}{% set ns.max_acc = p.accuracy %}{% endif %}
+    {% if (p.accuracy or 0) < ns.min_acc %}{% set ns.min_acc = p.accuracy %}{% endif %}
+  {% endfor %}
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v">{{ ns.count }}</div>
+      <div class="l">Players scouted</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{% if ns.count %}{{ (ns.total_acc / ns.count)|round(0)|int }}{% else %}—{% endif %}%</div>
+      <div class="l">Avg accuracy</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{% if ns.count %}{{ ns.min_acc }}–{{ ns.max_acc }}%{% else %}—{% endif %}</div>
+      <div class="l">Accuracy range</div>
+    </div>
+    <div class="kpi">
+      <div class="v">90 days</div>
+      <div class="l">Report lifetime</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🔎</span> Scout a new player</h2>
+    <span class="pill">By UID</span>
+  </div>
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>
+      Enter a player's <strong>UID</strong> to scout them. The accuracy of the report depends on your best
+      <a href="/career/{{ career.id }}/staff">scout's rating</a> — a 90-rated scout reveals attributes ±3, a 50-rated scout ±15.
+      Reports expire after 90 days.
+    </div>
+  </div>
+  <form action="/career/{{ career.id }}/scouting" method="post" style="margin-top: 14px;">
+    <div class="form-row-flex">
+      <div>
+        <label>Player UID</label>
+        <input type="number" name="player_uid" placeholder="e.g. 12345" required
+               style="width: 220px;" min="1">
+      </div>
+      <button type="submit" class="btn">🔍 Scout player</button>
+    </div>
+  </form>
+  <div class="muted small" style="margin-top: 10px;">
+    💡 Tip: search for players and their UIDs on the
+    <a href="/career/{{ career.id }}/transfers">transfer market</a> page.
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📋</span> Scouted players</h2>
+    {% if scouted %}<span class="pill green">{{ scouted|length }} reports</span>{% else %}<span class="pill amber">No reports yet</span>{% endif %}
+  </div>
+
+  {% if scouted %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Club</th>
+        <th class="num">Age</th>
+        <th>Position</th>
+        <th>Family</th>
+        <th class="center">Accuracy</th>
+        <th class="center">Scouted</th>
+        <th class="center">Value</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in scouted %}
+      <tr>
+        <td style="font-weight: 600;">
+          {{ p.name }}
+          <div class="muted small" style="font-weight: 400;">UID {{ p.player_uid }}</div>
+        </td>
+        <td class="muted">{{ p.club or '—' }}</td>
+        <td class="num">{{ p.age or '—' }}</td>
+        <td><code class="badge">{{ p.position_raw or '—' }}</code></td>
+        <td>
+          {% if p.primary_family %}
+          <span class="pos-tag {{ p.primary_family }}">{{ p.primary_family }}</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td class="center">
+          <div style="display: inline-flex; align-items: center; gap: 6px;">
+            <div style="width: 36px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+              <div style="width: {{ p.accuracy }}%; height: 100%; background: {% if p.accuracy >= 80 %}var(--accent-600){% elif p.accuracy >= 50 %}#f59e0b{% else %}var(--card-r){% endif %};"></div>
+            </div>
+            <span class="strong tabular small">{{ p.accuracy }}%</span>
+          </div>
+        </td>
+        <td class="center muted small">
+          {% if p.scouted_at %}{{ p.scouted_at[:10] }}{% else %}—{% endif %}
+        </td>
+        <td class="center">
+          {% if p.transfer_value and p.transfer_value > 0 %}
+            <span class="strong tabular small">${{ p.transfer_value|toLocale }}</span>
+          {% elif p.transfer_value == 0 %}
+            <span class="pill green small">Free</span>
+          {% else %}
+            <span class="muted small">—</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <div class="icon">🔍</div>
+    <div>No players scouted yet.</div>
+    <div class="muted small" style="margin-top: 6px;">
+      Find players to scout on the <a href="/career/{{ career.id }}/transfers">transfer market</a> —
+      enter their UID in the form above.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📊</span> Scouting accuracy guide</h2>
+  </div>
+  <div class="grid-3" style="gap: 12px;">
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid var(--accent-600);">
+      <div class="strong" style="color: var(--accent-600); margin-bottom: 4px;">🎯 80–95 accuracy</div>
+      <div class="muted small">Elite scout report. Attribute estimates ±3 of true values. Hire a 90+ rated scout.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid #f59e0b;">
+      <div class="strong" style="color: #b45309; margin-bottom: 4px;">⚖️ 40–79 accuracy</div>
+      <div class="muted small">Standard report. Attribute estimates ±10 of true values. Mid-range scout quality.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft); border-left: 3px solid var(--card-r);">
+      <div class="strong" style="color: var(--card-r); margin-bottom: 4px;">⚠️ Below 40</div>
+      <div class="muted small">Rough estimate only. Attribute estimates ±25 of true values. Hire better scouts!</div>
+    </div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/staff" class="btn secondary">👥 Hire scouts</a>
+  <a href="/career/{{ career.id }}/transfers" class="btn secondary">💰 Transfer market</a>
+</div>
+
+{% endblock %}

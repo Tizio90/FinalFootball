@@ -2,21 +2,63 @@
 {% block title %}New Career{% endblock %}
 {% block content %}
 
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/new">New career</a>
+  {% if step == 'club' %}<span class="sep">/</span><span>{{ division.based_raw }}</span>{% endif %}
+</div>
+
+<div class="page-head">
+  <div class="title-block">
+    <h1>Start a new career</h1>
+    {% if step == "division" %}
+    <div class="sub">Step 1 of 2 — Pick a league to manage in</div>
+    {% else %}
+    <div class="sub">Step 2 of 2 — Pick your club, formation, and mentality</div>
+    {% endif %}
+  </div>
+  {% if step == "division" %}
+  <div class="actions">
+    <span class="pill">1. League</span>
+    <span class="pill" style="opacity: 0.5;">2. Club</span>
+  </div>
+  {% else %}
+  <div class="actions">
+    <span class="pill green">✓ 1. League</span>
+    <span class="pill">2. Club</span>
+  </div>
+  {% endif %}
+</div>
+
 {% if step == "division" %}
-<div class="card">
-  <h2>Start a new career — pick a league</h2>
-  <p class="muted">Choose a league to manage in. You'll pick a club next.</p>
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">🏆</span> Choose a league</h2>
+      <span class="muted small">{{ divisions|length }} playable leagues · sorted by player count</span>
+    </div>
+  </div>
   <table>
     <thead>
-      <tr><th>League</th><th>Nation</th><th class="num">Clubs</th><th class="num">Players</th></tr>
+      <tr>
+        <th>League</th>
+        <th>Nation</th>
+        <th class="num">Clubs</th>
+        <th class="num">Players</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for d in divisions %}
       <tr>
-        <td><a href="/career/new/{{ d.id }}">{{ d.name }}</a></td>
+        <td>
+          <a href="/career/new/{{ d.id }}" style="font-weight: 600; color: var(--primary);">{{ d.name }}</a>
+        </td>
         <td class="muted">{{ d.nation_name }}</td>
-        <td class="num">{{ d.club_count }}</td>
+        <td class="num strong">{{ d.club_count }}</td>
         <td class="num muted">{{ d.player_count|toLocale }}</td>
+        <td class="right"><a href="/career/new/{{ d.id }}" class="btn small">Choose →</a></td>
       </tr>
     {% endfor %}
     </tbody>
@@ -25,17 +67,19 @@
 
 {% elif step == "club" %}
 <div class="card">
-  <h2>Start a new career — pick your club</h2>
-  <p class="muted">League: <strong>{{ division.based_raw }}</strong></p>
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>League: <strong>{{ division.based_raw }}</strong> ({{ division.nation_name }}) · {{ clubs|length }} clubs available</div>
+  </div>
 
   <form action="/career/create" method="post">
     <input type="hidden" name="division_id" value="{{ division.id }}">
     <input type="hidden" name="seed" value="1">
     <input type="hidden" name="double" value="y">
 
-    <div style="margin: 16px 0;">
-      <label>Your club:</label>
-      <select name="club" required>
+    <div style="margin: 18px 0;">
+      <label>Your club</label>
+      <select name="club" required style="min-width: 360px; padding: 10px 12px; font-size: 14px;">
         <option value="">— Select a club —</option>
         {% for c in clubs %}
         <option value="{{ c.name }}">{{ c.name }} ({{ c.player_count }} players)</option>
@@ -43,31 +87,34 @@
       </select>
     </div>
 
-    <div style="margin: 16px 0;">
-      <label>Formation:</label>
-      <select name="formation">
-        <option value="4-3-3" selected>4-3-3 (balanced)</option>
-        <option value="4-4-2">4-4-2 (two strikers)</option>
-        <option value="4-2-3-1">4-2-3-1 (one striker)</option>
-        <option value="3-5-2">3-5-2 (wing-backs)</option>
-        <option value="5-4-1">5-4-1 (defensive)</option>
-      </select>
+    <div class="grid-2" style="margin: 18px 0;">
+      <div>
+        <label>Formation</label>
+        <select name="formation" style="width: 100%;">
+          <option value="4-3-3" selected>4-3-3 — Balanced</option>
+          <option value="4-4-2">4-4-2 — Two strikers</option>
+          <option value="4-2-3-1">4-2-3-1 — One striker</option>
+          <option value="3-5-2">3-5-2 — Wing-backs</option>
+          <option value="5-4-1">5-4-1 — Defensive</option>
+        </select>
+      </div>
+      <div>
+        <label>Mentality</label>
+        <select name="mentality" style="width: 100%;">
+          <option value="defensive">Defensive — fewer goals, more solidity</option>
+          <option value="balanced" selected>Balanced — recommended</option>
+          <option value="attacking">Attacking — more goals, more risk</option>
+        </select>
+      </div>
     </div>
 
-    <div style="margin: 16px 0;">
-      <label>Mentality:</label>
-      <select name="mentality">
-        <option value="defensive">Defensive (fewer goals, more solidity)</option>
-        <option value="balanced" selected>Balanced</option>
-        <option value="attacking">Attacking (more goals, more risk)</option>
-      </select>
+    <div class="divider"></div>
+    <div class="btn-group">
+      <button type="submit" class="btn large">▶ Start career</button>
+      <a href="/career/new" class="btn secondary">← Back to leagues</a>
     </div>
-
-    <button type="submit" class="btn">▶ Start career</button>
   </form>
 </div>
-
-<p><a href="/career/new" class="btn secondary">← Back to leagues</a></p>
 {% endif %}
 
 {% endblock %}

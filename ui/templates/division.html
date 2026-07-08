@@ -1,23 +1,50 @@
 {% extends "base.html" %}
 {% block title %}{{ division.based_raw }} — Football Sim{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>{{ division.based_raw }}</h2>
-  <div class="stat-grid">
-    <div class="stat-row"><span class="label">Nation</span>
-      <span class="value"><a href="/nation/{{ division.nation_code }}">{{ division.nation_name }}</a></span></div>
-    <div class="stat-row"><span class="label">Division</span><span class="value">{{ division.name }}</span></div>
-    <div class="stat-row"><span class="label">Clubs</span><span class="value">{{ division.club_count }}</span></div>
-    <div class="stat-row"><span class="label">Players</span><span class="value">{{ division.player_count|toLocale }}</span></div>
-    <div class="stat-row"><span class="label">Playable</span>
-      <span class="value">{% if division.playable %}✓ Yes{% else %}— No{% endif %}</span></div>
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/nations">Nations</a>
+  <span class="sep">/</span>
+  <a href="/nation/{{ division.nation_code }}">{{ division.nation_name }}</a>
+  <span class="sep">/</span>
+  <span>{{ division.based_raw }}</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block">
+    <h1>{{ division.based_raw }}</h1>
+    <div class="sub">{{ division.nation_name }} · {{ division.name }}</div>
   </div>
+  <div class="actions">
+    {% if division.playable and clubs|length >= 2 %}
+    <span class="pill green">✓ Playable</span>
+    {% else %}
+    <span class="pill">Not playable</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi"><div class="v">{{ division.club_count }}</div><div class="l">Clubs</div></div>
+    <div class="kpi"><div class="v">{{ division.player_count|toLocale }}</div><div class="l">Players</div></div>
+    <div class="kpi">
+      <div class="v {% if division.playable %}accent{% endif %}">{% if division.playable %}Yes{% else %}No{% endif %}</div>
+      <div class="l">Playable</div>
+    </div>
+    <div class="kpi"><div class="v"><a href="/nation/{{ division.nation_code }}" style="color: var(--primary);">{{ division.nation_name }}</a></div><div class="l">Nation</div></div>
+  </div>
+
   {% if division.playable and clubs|length >= 2 %}
-  <div style="margin-top: 16px;">
-    <form action="/division/{{ division.id }}/season/new" method="post" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+  <div class="divider"></div>
+  <h2 style="margin-bottom: 12px;"><span class="icon">🚀</span> Start a new season</h2>
+  <form action="/division/{{ division.id }}/season/new" method="post">
+    <div class="form-row-flex">
       <div>
         <label>Seed</label>
-        <input type="number" name="seed" value="1" min="1" style="width: 80px;">
+        <input type="number" name="seed" value="1" min="1" style="width: 90px;">
       </div>
       <div>
         <label>Fixtures</label>
@@ -34,32 +61,60 @@
         </select>
       </div>
       <button type="submit" class="btn">▶ Start season ({{ clubs|length }} clubs)</button>
-    </form>
-  </div>
+    </div>
+  </form>
   {% elif division.playable and clubs|length < 2 %}
-  <p class="muted" style="margin-top: 12px;">Not enough clubs with ≥14 players to simulate a season.</p>
+  <div class="alert warning mt-16">
+    <span class="icon">⚠</span>
+    <div>Not enough clubs with ≥14 players to simulate a season in this division.</div>
+  </div>
   {% else %}
-  <p class="muted" style="margin-top: 12px;">This division is not marked as playable (needs ≥4 clubs with ≥14 players each).</p>
+  <div class="alert info mt-16">
+    <span class="icon">ℹ</span>
+    <div>This division is not marked as playable (needs ≥4 clubs with ≥14 players each).</div>
+  </div>
   {% endif %}
 </div>
 
-<div class="card">
-  <h2>Clubs ({{ clubs|length }})</h2>
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">🎽</span> Clubs ({{ clubs|length }})</h2>
+    </div>
+  </div>
   <table>
     <thead>
-      <tr><th>#</th><th>Club</th><th class="num">Players</th><th></th></tr>
+      <tr>
+        <th class="num" style="width: 50px;">#</th>
+        <th>Club</th>
+        <th class="num">Players</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for c in clubs %}
       <tr>
-        <td class="muted">{{ loop.index }}</td>
-        <td><a href="/club/{{ c.name }}">{{ c.name }}</a></td>
-        <td class="num">{{ c.player_count }}</td>
+        <td class="muted num">{{ loop.index }}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="crest sm">{{ c.name[:2]|upper }}</span>
+            <a href="/club/{{ c.name }}" style="font-weight: 600; color: var(--primary);">{{ c.name }}</a>
+          </div>
+        </td>
+        <td class="num strong">{{ c.player_count }}</td>
         <td>
           {% if c.player_count >= 14 %}
-            <a href="/club/{{ c.name }}" class="btn small">View squad</a>
+            <span class="pill green">Full squad</span>
           {% else %}
-            <span class="muted" style="font-size: 11px;">too few players</span>
+            <span class="pill amber">Thin squad</span>
+          {% endif %}
+        </td>
+        <td class="right">
+          {% if c.player_count >= 14 %}
+            <a href="/club/{{ c.name }}" class="btn small secondary">View squad →</a>
+          {% else %}
+            <span class="muted small">too few players</span>
           {% endif %}
         </td>
       </tr>
@@ -68,5 +123,8 @@
   </table>
 </div>
 
-<p><a href="/nation/{{ division.nation_code }}" class="btn secondary">← {{ division.nation_name }}</a></p>
+<div class="btn-group">
+  <a href="/nation/{{ division.nation_code }}" class="btn secondary">← {{ division.nation_name }}</a>
+</div>
+
 {% endblock %}

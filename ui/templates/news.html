@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}News — {{ career.club }}{% endblock %}
+{% block content %}
+
+{% set category_meta = {
+  "result_win":   {"icon": "✅", "label": "Win",       "cls": "green"},
+  "result_loss":  {"icon": "❌", "label": "Loss",      "cls": "red"},
+  "result_draw":  {"icon": "🤝", "label": "Draw",      "cls": ""},
+  "transfer":     {"icon": "💰", "label": "Transfer",  "cls": "blue"},
+  "youth":        {"icon": "🌱", "label": "Youth",     "cls": ""},
+  "development":  {"icon": "📈", "label": "Development","cls": "amber"}
+} %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>News</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">📰 News Feed</h1>
+      <div class="sub">{{ career.club }} · results, transfers, youth and development headlines</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🗂</span> Filter by category</h2>
+  </div>
+  <div class="btn-group">
+    {% for key, meta in category_meta.items() %}
+      {% set count = news|selectattr('category', 'equalto', key)|list|length %}
+      <span class="pill {{ meta.cls }}" style="opacity: {% if count > 0 %}1{% else %}0.45{% endif %};">
+        {{ meta.icon }} {{ meta.label }} · {{ count }}
+      </span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📰</span> Latest headlines</h2>
+    <span class="pill">{{ news|length }} items</span>
+  </div>
+
+  {% if news %}
+  <div class="stack" style="gap: 10px;">
+    {% for n in news %}
+      {% set meta = category_meta.get(n.category, {"icon": "📢", "label": n.category|title, "cls": ""}) %}
+      <div style="display: flex; gap: 12px; padding: 14px 16px; border: 1px solid var(--border);
+                  border-radius: var(--r-md); background: #fff; border-left: 4px solid
+                  {% if n.category == 'result_win' %}var(--accent-600)
+                  {% elif n.category == 'result_loss' %}var(--card-r)
+                  {% elif n.category == 'result_draw' %}var(--muted-2)
+                  {% elif n.category == 'transfer' %}#1d4ed8
+                  {% elif n.category == 'youth' %}#7c3aed
+                  {% elif n.category == 'development' %}#f59e0b
+                  {% else %}var(--border-strong){% endif %};
+                  transition: box-shadow .15s ease, transform .05s ease;">
+        <div style="flex-shrink: 0; width: 40px; height: 40px; border-radius: var(--r);
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 20px; background: var(--bg-soft); border: 1px solid var(--border);">
+          {{ meta.icon }}
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px;">
+            <span class="pill {{ meta.cls }}">{{ meta.label }}</span>
+            {% if n.round %}
+            <span class="badge">Round {{ n.round }}</span>
+            {% endif %}
+            <span class="muted small" style="margin-left: auto;">
+              {% if n.created_at %}{{ n.created_at[:16]|replace('T', ' ') }}{% endif %}
+            </span>
+          </div>
+          <div class="strong" style="font-size: 14px; color: var(--primary); margin-bottom: 4px;">
+            {{ n.headline }}
+          </div>
+          <div class="muted" style="font-size: 13px; line-height: 1.5;">
+            {{ n.body }}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="icon">📰</div>
+    <div>No news yet.</div>
+    <div class="muted small" style="margin-top: 6px;">
+      News items appear here as you play matches, make transfers, and develop players.
+      <a href="/career/{{ career.id }}">Play your next match</a> to start generating headlines.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🎨</span> Category legend</h2>
+  </div>
+  <div class="grid-3" style="gap: 10px;">
+    {% for key, meta in category_meta.items() %}
+    <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                border: 1px solid var(--border); border-radius: var(--r); background: var(--bg-soft);">
+      <span style="font-size: 18px;">{{ meta.icon }}</span>
+      <div>
+        <div class="strong small" style="color: var(--primary);">{{ meta.label }}</div>
+        <div class="muted" style="font-size: 11px;">
+          {% if key == 'result_win' %}Match wins
+          {% elif key == 'result_loss' %}Match losses
+          {% elif key == 'result_draw' %}Drawn matches
+          {% elif key == 'transfer' %}Transfer activity
+          {% elif key == 'youth' %}Youth academy news
+          {% elif key == 'development' %}Player development{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/interactions" class="btn secondary">💬 Player interactions</a>
+</div>
+
+{% endblock %}

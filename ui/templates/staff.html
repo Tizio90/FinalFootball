@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Staff — {{ career.club }}{% endblock %}
+{% block content %}
+
+{% macro staff_effects(role_key) -%}
+{% set info = staff_roles.get(role_key, {}) %}
+{% set effs = info.get("effects", {}) if info else {} %}
+{% if effs %}
+  {% for k, v in effs.items() %}
+    <span class="badge" style="margin: 1px 2px;">
+      {% if k == "training_efficiency" %}+{{ (v * 100)|int }}% training
+      {% elif k == "lineup_suggestion" %}Lineup aid
+      {% elif k == "def_training_bonus" %}+{{ (v * 100)|int }}% DEF
+      {% elif k == "mid_training_bonus" %}+{{ (v * 100)|int }}% MID
+      {% elif k == "att_training_bonus" %}+{{ (v * 100)|int }}% ATT
+      {% elif k == "gk_training_bonus" %}+{{ (v * 100)|int }}% GK
+      {% elif k == "scout_accuracy" %}+{{ v }} scout
+      {% elif k == "injury_reduction" %}-{{ (v * 100)|int }}% injuries
+      {% elif k == "recovery_bonus" %}+{{ (v * 100)|int }}% recovery
+      {% elif k == "fatigue_reduction" %}-{{ (v * 100)|int }}% fatigue
+      {% else %}{{ k }}
+      {% endif %}
+    </span>
+  {% endfor %}
+{% endif %}
+{%- endmacro %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Staff</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">👥 Backroom Staff</h1>
+      <div class="sub">{{ career.club }} · hire coaches, scouts, physios and more to boost your club</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v">{{ staff|length }}</div>
+      <div class="l">Staff hired</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">${{ total_wages|toLocale }}</div>
+      <div class="l">Weekly wages</div>
+    </div>
+    <div class="kpi">
+      <div class="v">${{ (total_wages * 38)|toLocale }}</div>
+      <div class="l">Season wage bill</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ candidates|length }}</div>
+      <div class="l">Candidates available</div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="flex: 1.3;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">📋</span> Current staff</h2>
+        {% if staff %}<span class="pill">{{ staff|length }} hired</span>{% else %}<span class="pill amber">None hired</span>{% endif %}
+      </div>
+
+      {% if staff %}
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th style="width: 160px;">Rating</th>
+            <th class="num">Wage / wk</th>
+            <th class="center" style="width: 80px;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for s in staff %}
+          {% set role_info = staff_roles.get(s.role, {}) %}
+          <tr>
+            <td style="font-weight: 600;">{{ s.name }}</td>
+            <td>
+              <div>{{ role_info.label if role_info else s.role }}</div>
+              <div style="margin-top: 3px;">{{ staff_effects(s.role) }}</div>
+            </td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
+                  <div style="width: {{ s.rating }}%; height: 100%; background: {% if s.rating >= 80 %}var(--accent-600){% elif s.rating >= 60 %}var(--accent){% elif s.rating >= 40 %}#f59e0b{% else %}var(--card-r){% endif %};"></div>
+                </div>
+                <span class="strong tabular" style="min-width: 28px; text-align: right;">{{ s.rating }}</span>
+              </div>
+            </td>
+            <td class="num">${{ s.wage|toLocale }}</td>
+            <td class="center">
+              <form action="/career/{{ career.id }}/staff" method="post" class="inline"
+                    onsubmit="return confirm('Fire {{ s.name }}?');">
+                <input type="hidden" name="action" value="fire">
+                <input type="hidden" name="staff_id" value="{{ s.id }}">
+                <button type="submit" class="btn small" style="background: var(--card-r); border-color: var(--card-r);">✕ Fire</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">
+        <div class="icon">👥</div>
+        <div>No staff hired yet.</div>
+        <div class="muted small" style="margin-top: 6px;">Browse candidates on the right to hire your first staff member.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col" style="flex: 1;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">🎯</span> Hire candidates</h2>
+        <span class="pill">6 available</span>
+      </div>
+
+      <div class="stack">
+      {% for c in candidates %}
+        {% set role_info = staff_roles.get(c.role, {}) %}
+        <div class="card tight" style="margin: 0; border-color: var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">{{ c.name }}</div>
+              <div class="muted small">{{ role_info.label if role_info else c.label }}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="strong tabular">${{ c.wage|toLocale }}</div>
+              <div class="muted small">per week</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+            <div style="flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+              <div style="width: {{ c.rating }}%; height: 100%; background: {% if c.rating >= 80 %}var(--accent-600){% elif c.rating >= 60 %}var(--accent){% elif c.rating >= 40 %}#f59e0b{% else %}var(--card-r){% endif %};"></div>
+            </div>
+            <span class="strong tabular small">Rating {{ c.rating }}</span>
+          </div>
+          <div style="margin-bottom: 10px;">{{ staff_effects(c.role) }}</div>
+          <form action="/career/{{ career.id }}/staff" method="post">
+            <input type="hidden" name="action" value="hire">
+            <input type="hidden" name="name" value="{{ c.name }}">
+            <input type="hidden" name="role" value="{{ c.role }}">
+            <input type="hidden" name="rating" value="{{ c.rating }}">
+            <input type="hidden" name="wage" value="{{ c.wage }}">
+            <button type="submit" class="btn small block">💰 Hire {{ c.name.split()[0] }}</button>
+          </form>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/training" class="btn secondary">🏋️ Training settings</a>
+  <a href="/career/{{ career.id }}/finances" class="btn secondary">💰 Finances</a>
+</div>
+
+{% endblock %}

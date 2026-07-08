@@ -2,23 +2,43 @@
 {% block title %}Tactics — {{ career.club }}{% endblock %}
 {% block content %}
 
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Tactics</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">Tactics</h1>
+      <div class="sub">{{ career.club }} · set your formation, mentality, and starting XI</div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
-  <h2>Tactics — {{ career.club }}</h2>
-  <p class="muted">Pick your formation and mentality. Use "auto" for any slot to let the AI pick the best player there. Set all 11 slots manually to override the AI completely.</p>
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>Pick your formation and mentality. Use <strong>"Auto"</strong> for any slot to let the AI pick the best player there. Set all 11 slots manually to override the AI completely.</div>
+  </div>
 
   <form action="/career/{{ career.id }}/tactics" method="post">
-    <div style="display: flex; gap: 24px; margin: 16px 0; flex-wrap: wrap;">
+    <div class="grid-2" style="margin: 18px 0;">
       <div>
-        <label>Formation:</label>
-        <select name="formation" id="formation-select">
+        <label>Formation</label>
+        <select name="formation" id="formation-select" style="width: 100%;">
           {% for key, slots in formations.items() %}
           <option value="{{ key }}" {% if key == current_formation %}selected{% endif %}>{{ key }}</option>
           {% endfor %}
         </select>
       </div>
       <div>
-        <label>Mentality:</label>
-        <select name="mentality">
+        <label>Mentality</label>
+        <select name="mentality" style="width: 100%;">
           <option value="defensive" {% if current_mentality == 'defensive' %}selected{% endif %}>Defensive</option>
           <option value="balanced" {% if current_mentality == 'balanced' %}selected{% endif %}>Balanced</option>
           <option value="attacking" {% if current_mentality == 'attacking' %}selected{% endif %}>Attacking</option>
@@ -26,63 +46,105 @@
       </div>
     </div>
 
-    <h3 style="margin-top: 24px;">Starting XI</h3>
-    <table class="lineup">
-      <thead>
-        <tr><th>#</th><th>Slot</th><th>Player</th><th class="num">CA</th></tr>
-      </thead>
-      <tbody>
-      {% for p in xi %}
-        <tr>
-          <td class="muted">{{ loop.index0 }}</td>
-          <td class="slot-{{ p.family }}">{{ p.slot }}</td>
-          <td>
-            <select name="slot_{{ loop.index0 }}" style="width: 100%; min-width: 200px;">
-              <option value="auto">Auto ({{ p.name }} — {{ '%.0f' % p.score }})</option>
-              {% for s in squad %}
-              <option value="{{ s.uid }}" {% if p.uid == s.uid %}selected{% endif %}>
-                {{ s.name }} ({{ s.primary_family }} — CA {{ '%.0f' % s.best_ca }})
-              </option>
-              {% endfor %}
-            </select>
-          </td>
-          <td class="num">{{ '%.0f' % p.score if p.uid else '—' }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <div class="section-head" style="margin-top: 22px;">
+      <h2><span class="icon">⚽</span> Starting XI</h2>
+      <span class="muted small">11 slots · formation {{ current_formation }}</span>
+    </div>
 
-    <h3 style="margin-top: 24px;">Bench</h3>
-    <table class="lineup">
-      <thead>
-        <tr><th>#</th><th>Role</th><th>Player</th></tr>
-      </thead>
-      <tbody>
-      {% for p in bench %}
-        <tr>
-          <td class="muted">{{ loop.index0 }}</td>
-          <td class="slot-{{ p.family }}">{{ p.family }}</td>
-          <td>
-            <select name="bench_{{ loop.index0 }}" style="width: 100%; min-width: 200px;">
-              <option value="auto">Auto ({{ p.name }} — {{ '%.0f' % p.best_ca }})</option>
-              {% for s in squad %}
-              <option value="{{ s.uid }}" {% if p.uid == s.uid %}selected{% endif %}>
-                {{ s.name }} ({{ s.primary_family }} — CA {{ '%.0f' % s.best_ca }})
-              </option>
-              {% endfor %}
-            </select>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    {% set ns = namespace(current_fam='', count=0) %}
+    {% for p in xi %}
+      {% if p.family != ns.current_fam %}
+        {% if ns.current_fam %}
+          </tbody></table></div>
+        {% endif %}
+        {% set ns.current_fam = p.family %}
+        {% set ns.count = 0 %}
+        <div class="tactics-group {{ p.family }}">
+          <div class="group-head">
+            {% if p.family == 'GK' %}🧤 Goalkeeper
+            {% elif p.family == 'DEF' %}🛡 Defence
+            {% elif p.family == 'MID' %}⚙ Midfield
+            {% elif p.family == 'ATT' %}⚔ Attack
+            {% endif %}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 70px;">Slot</th>
+                <th>Player</th>
+                <th class="num" style="width: 80px;">CA</th>
+              </tr>
+            </thead>
+            <tbody>
+      {% endif %}
+      <tr>
+        <td><span class="pos-tag {{ p.family }}">{{ p.slot }}</span></td>
+        <td>
+          <select name="slot_{{ loop.index0 }}" style="width: 100%; min-width: 280px;">
+            <option value="auto">Auto — {{ p.name }} (CA {{ '%.0f' % p.score }})</option>
+            {% for s in squad %}
+            <option value="{{ s.uid }}" {% if p.uid == s.uid %}selected{% endif %}>
+              {{ s.name }} ({{ s.primary_family }} — CA {{ '%.0f' % s.best_ca }})
+            </option>
+            {% endfor %}
+          </select>
+        </td>
+        <td class="num strong">{{ '%.0f' % p.score if p.uid else '—' }}</td>
+      </tr>
+      {% set ns.count = ns.count + 1 %}
+    {% endfor %}
+    {% if ns.current_fam %}
+      </tbody></table></div>
+    {% endif %}
 
-    <div style="margin-top: 20px;">
-      <button type="submit" class="btn">💾 Save tactics</button>
+    <div class="section-head" style="margin-top: 22px;">
+      <h2><span class="icon">🪑</span> Bench</h2>
+      <span class="muted small">7 slots</span>
+    </div>
+
+    <div class="tactics-group MID" style="border-color: var(--border);">
+      <div class="group-head" style="background: var(--muted);">
+        🔄 Substitutes
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 70px;">Pos</th>
+            <th>Player</th>
+            <th class="num" style="width: 80px;">CA</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in bench %}
+          <tr>
+            <td><span class="pos-tag {{ p.family }}">{{ p.family }}</span></td>
+            <td>
+              <select name="bench_{{ loop.index0 }}" style="width: 100%; min-width: 280px;">
+                <option value="auto">Auto — {{ p.name }} (CA {{ '%.0f' % p.best_ca }})</option>
+                {% for s in squad %}
+                <option value="{{ s.uid }}" {% if p.uid == s.uid %}selected{% endif %}>
+                  {{ s.name }} ({{ s.primary_family }} — CA {{ '%.0f' % s.best_ca }})
+                </option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="num strong">{{ '%.0f' % p.best_ca }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="divider"></div>
+    <div class="btn-group">
+      <button type="submit" class="btn large">💾 Save tactics</button>
       <a href="/career/{{ career.id }}" class="btn secondary">Cancel</a>
     </div>
   </form>
 </div>
 
-<p><a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a></p>
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+</div>
+
 {% endblock %}

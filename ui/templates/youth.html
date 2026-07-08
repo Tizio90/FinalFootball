@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Youth Academy — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Youth Academy</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">⭐ Youth Academy</h1>
+      <div class="sub">{{ career.club }} · develop young prospects and promote them to the first team</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v">{{ intake|length }}</div>
+      <div class="l">This season's intake</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{% if intake %}{{ intake[0].intake_year or '—' }}{% else %}—{% endif %}</div>
+      <div class="l">Class of</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{% if intake %}15–17{% else %}—{% endif %}</div>
+      <div class="l">Age range</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{% if intake %}✓ Ready{% else %}Pending{% endif %}</div>
+      <div class="l">Intake status</div>
+    </div>
+  </div>
+</div>
+
+{% if not intake %}
+<div class="card" style="border-color: var(--accent); background: linear-gradient(180deg, var(--accent-50) 0%, #fff 100%);">
+  <div class="section-head">
+    <h2><span class="icon">🌱</span> Generate this season's intake</h2>
+    <span class="pill amber">Not yet generated</span>
+  </div>
+  <div class="alert info" style="margin-bottom: 16px;">
+    <span class="icon">ℹ</span>
+    <div>
+      Each season your academy produces <strong>3–8 new prospects</strong> aged 15–17.
+      Better divisions produce higher-quality youth players. Generate now to see who's coming through the ranks.
+    </div>
+  </div>
+  <form action="/career/{{ career.id }}/youth/generate" method="post">
+    <button type="submit" class="btn large">🌱 Generate youth intake</button>
+  </form>
+</div>
+{% endif %}
+
+{% if intake %}
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📋</span> Current intake — Class of {{ intake[0].intake_year or 'this year' }}</h2>
+    <div class="actions">
+      <span class="pill green">{{ intake|length }} newgens</span>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40px;">#</th>
+        <th>Name</th>
+        <th class="num">Age</th>
+        <th>Position</th>
+        <th>Family</th>
+        <th class="center">Foot</th>
+        <th class="center">Joined</th>
+        <th class="center">CA estimate</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in intake %}
+      <tr>
+        <td class="num muted">{{ loop.index }}</td>
+        <td style="font-weight: 600;">{{ p.name }}</td>
+        <td class="num">{{ p.age }}</td>
+        <td>
+          <code class="badge">{{ p.position_raw or '—' }}</code>
+        </td>
+        <td>
+          {% if p.primary_family %}
+          <span class="pos-tag {{ p.primary_family }}">{{ p.primary_family }}</span>
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td class="center">
+          {% if p.preferred_foot %}
+            <span class="badge">{% if p.preferred_foot == 'L' %}🦶 Left{% elif p.preferred_foot == 'R' %}🦶 Right{% else %}Both{% endif %}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td class="center muted small">
+          {% if p.created_at %}{{ p.created_at[:10] }}{% else %}—{% endif %}
+        </td>
+        <td class="center">
+          <span class="pill amber" title="Youth prospects need assessment">??? / 100</span>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="alert info" style="margin-top: 14px;">
+    <span class="icon">💡</span>
+    <div>
+      Youth players are <strong>automatically added to your squad</strong>. Their attributes are still raw — they need
+      <a href="/career/{{ career.id }}/training">training</a> and match minutes to develop. Use the
+      <a href="/career/{{ career.id }}/scouting">scouting page</a> to assess their full potential over time.
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📈</span> Position family breakdown</h2>
+  </div>
+  {% set ns = namespace(gk=0, def=0, mid=0, att=0) %}
+  {% for p in intake %}
+    {% if p.primary_family == 'GK' %}{% set ns.gk = ns.gk + 1 %}
+    {% elif p.primary_family == 'DEF' %}{% set ns.def = ns.def + 1 %}
+    {% elif p.primary_family == 'MID' %}{% set ns.mid = ns.mid + 1 %}
+    {% elif p.primary_family == 'ATT' %}{% set ns.att = ns.att + 1 %}
+    {% endif %}
+  {% endfor %}
+  <div class="grid-4" style="gap: 10px;">
+    <div class="kpi" style="border-left: 3px solid var(--gk);">
+      <div class="v">{{ ns.gk }}</div>
+      <div class="l">🧤 Goalkeepers</div>
+    </div>
+    <div class="kpi" style="border-left: 3px solid var(--def);">
+      <div class="v">{{ ns.def }}</div>
+      <div class="l">🛡 Defenders</div>
+    </div>
+    <div class="kpi" style="border-left: 3px solid var(--mid);">
+      <div class="v">{{ ns.mid }}</div>
+      <div class="l">⚙ Midfielders</div>
+    </div>
+    <div class="kpi" style="border-left: 3px solid var(--att);">
+      <div class="v">{{ ns.att }}</div>
+      <div class="l">⚔ Attackers</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🎓</span> How youth development works</h2>
+  </div>
+  <div class="grid-3" style="gap: 14px;">
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft);">
+      <div style="font-size: 22px; margin-bottom: 6px;">🌱</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Generate intake</div>
+      <div class="muted small">Once per season, your academy produces 3–8 newgens aged 15–17. Quality scales with your division.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft);">
+      <div style="font-size: 22px; margin-bottom: 6px;">🏋️</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Train & develop</div>
+      <div class="muted small">Set <a href="/career/{{ career.id }}/training">training focus</a> and hire coaches to maximize growth. Young players improve fastest between 16–24.</div>
+    </div>
+    <div style="padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-soft);">
+      <div style="font-size: 22px; margin-bottom: 6px;">⚽</div>
+      <div class="strong" style="color: var(--primary); margin-bottom: 4px;">Promote to first team</div>
+      <div class="muted small">Youth players join your squad automatically. Give them minutes via the <a href="/career/{{ career.id }}/tactics">tactics page</a>.</div>
+    </div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/training" class="btn secondary">🏋️ Training</a>
+  <a href="/career/{{ career.id }}/scouting" class="btn secondary">🔍 Scouting</a>
+</div>
+
+{% endblock %}

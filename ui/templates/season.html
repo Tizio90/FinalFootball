@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Season {{ season_id }}{% endblock %}
 {% block content %}
-<div class="card">
-  <h2>Season {{ season_id }}</h2>
-  <div class="row">
-    <div class="col">
-      <div class="stat-row"><span class="label">Clubs</span><span class="value">{{ clubs|length }}</span></div>
-      <div class="stat-row"><span class="label">Rounds</span><span class="value">{{ total_rounds }}</span></div>
-    </div>
-    <div class="col">
-      <div class="stat-row"><span class="label">Rounds played</span><span class="value">{{ rounds_played }} / {{ total_rounds }}</span></div>
-      <div class="stat-row"><span class="label">Created</span><span class="value">{{ season.created_at[:19].replace('T', ' ') }}</span></div>
-    </div>
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <span>Season {{ season_id }}</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block">
+    <h1>Season Overview</h1>
+    <div class="sub"><code>{{ season_id }}</code>{% if season.division_name %} · {{ season.division_name }}{% endif %}</div>
   </div>
-  <div style="margin-top: 12px; display: flex; gap: 8px;">
+  <div class="actions">
     {% if rounds_played < total_rounds %}
     <form action="/season/{{ season_id }}/sim-round/next" method="post" class="inline">
       <button type="submit" class="btn">▶ Simulate next round</button>
@@ -22,19 +22,35 @@
       <button type="submit" class="btn secondary">⏩ Simulate rest of season</button>
     </form>
     {% else %}
-    <span class="pill green">Season complete</span>
+    <span class="pill green">✓ Season complete</span>
     {% endif %}
   </div>
 </div>
 
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi"><div class="v">{{ clubs|length }}</div><div class="l">Clubs</div></div>
+    <div class="kpi"><div class="v">{{ total_rounds }}</div><div class="l">Rounds</div></div>
+    <div class="kpi"><div class="v accent">{{ rounds_played }} / {{ total_rounds }}</div><div class="l">Rounds played</div></div>
+    <div class="kpi"><div class="v" style="font-size: 13px;">{{ season.created_at[:19].replace('T', ' ') }}</div><div class="l">Created</div></div>
+  </div>
+</div>
+
 <div class="row">
-  <div class="col" style="flex: 2;">
+  <div class="col" style="flex: 2.2;">
     <div class="card">
-      <h2>Standings</h2>
-      <table>
+      <div class="section-head">
+        <h2><span class="icon">📋</span> Standings</h2>
+        {% if rounds_played < total_rounds %}
+        <span class="pill">After round {{ rounds_played }}</span>
+        {% else %}
+        <span class="pill green">Final</span>
+        {% endif %}
+      </div>
+      <table class="standings">
         <thead>
           <tr>
-            <th class="pos">#</th>
+            <th class="num">#</th>
             <th>Club</th>
             <th class="num">P</th>
             <th class="num">W</th>
@@ -49,8 +65,10 @@
         </thead>
         <tbody>
         {% for row in standings %}
-          <tr>
-            <td class="pos">{{ loop.index }}</td>
+          {% set position = loop.index %}
+          {% set n_clubs = standings|length %}
+          <tr class="{% if position <= 3 %}zone-ucl{% elif position > n_clubs - 3 %}zone-releg{% endif %}">
+            <td class="pos"><span class="zone-bar"></span>{{ position }}</td>
             <td class="club-name"><a href="/club/{{ row.club }}">{{ row.club }}</a></td>
             <td class="num">{{ row.played }}</td>
             <td class="num">{{ row.won }}</td>
@@ -59,26 +77,36 @@
             <td class="num">{{ row.gf }}</td>
             <td class="num">{{ row.ga }}</td>
             <td class="num">{{ '%+d' % row.gd }}</td>
-            <td class="num"><strong>{{ row.points }}</strong></td>
+            <td class="num pts">{{ row.points }}</td>
             <td>
+              <span class="form-row">
               {% for f in row.form[-5:] %}<span class="form {{ f }}">{{ f }}</span>{% endfor %}
+              </span>
             </td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
+      <div class="legend">
+        <span class="item"><span class="swatch" style="background: var(--zone-ucl);"></span> Champions League</span>
+        <span class="item"><span class="swatch" style="background: var(--zone-releg);"></span> Relegation</span>
+      </div>
     </div>
   </div>
   <div class="col" style="flex: 1;">
-    <div class="card">
-      <h2>Clubs</h2>
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2><span class="icon">🎽</span> Clubs</h2>
+        </div>
+      </div>
       <table>
         <thead><tr><th>Club</th><th class="num">Squad</th></tr></thead>
         <tbody>
         {% for c in clubs %}
           <tr>
-            <td><a href="/club/{{ c }}">{{ c }}</a></td>
-            <td class="num muted">{{ squads[c] if squads and c in squads else '' }}</td>
+            <td><a href="/club/{{ c }}" style="font-weight: 500;">{{ c }}</a></td>
+            <td class="num muted">{{ squads[c] if squads and c in squads else '—' }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -88,32 +116,38 @@
 </div>
 
 <div class="card">
-  <h2>Fixtures &amp; Results</h2>
+  <div class="section-head">
+    <h2><span class="icon">📅</span> Fixtures &amp; Results</h2>
+    <span class="muted small">{{ rounds_played }} of {{ total_rounds }} rounds played</span>
+  </div>
   {% for round_idx, round_matches in enumerate(fixtures, 1) %}
-  <details {% if round_idx <= rounds_played %}open{% endif %} style="margin-bottom: 8px;">
-    <summary style="cursor: pointer; font-weight: 600; color: var(--primary);">
-      Round {{ round_idx }}
-      {% if round_idx in matches_by_round %}<span class="muted" style="font-weight: normal;"> — played</span>{% endif %}
+  <details class="round" {% if round_idx <= rounds_played %}open{% endif %}>
+    <summary>
+      <span>Round {{ round_idx }}</span>
+      {% if round_idx in matches_by_round %}
+      <span class="round-meta">played · {{ round_matches|length }} matches</span>
+      {% else %}
+      <span class="round-meta">upcoming</span>
+      {% endif %}
     </summary>
-    <table style="margin-top: 6px;">
-      <tbody>
+    <div class="body">
       {% for home, away in round_matches %}
         {% set result = matches_by_round.get(round_idx, {}).get((home, away)) %}
-        <tr>
-          <td style="text-align: right; width: 40%;">{{ home }}</td>
-          <td class="center" style="width: 20%;">
+        <div class="fixture-row">
+          <div class="home">{{ home }}</div>
+          <div class="score">
             {% if result %}
-              <a href="/match/{{ result.match_id }}" class="scoreline">{{ result.home_score }} - {{ result.away_score }}</a>
+              <a href="/match/{{ result.match_id }}" class="scoreline">{{ result.home_score }} – {{ result.away_score }}</a>
             {% else %}
-              <span class="muted">vs</span>
+              <span class="scoreline vs">vs</span>
             {% endif %}
-          </td>
-          <td style="width: 40%;">{{ away }}</td>
-        </tr>
+          </div>
+          <div class="away">{{ away }}</div>
+        </div>
       {% endfor %}
-      </tbody>
-    </table>
+    </div>
   </details>
   {% endfor %}
 </div>
+
 {% endblock %}

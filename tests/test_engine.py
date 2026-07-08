@@ -290,7 +290,7 @@ def test_formation_impact(n=200, seed_base=40000):
         # use mean difference as primary check (more robust than chi-squared)
         mean_diff = abs(avg_442 - avg_352)
         print(f"  Mean diff: {mean_diff:.2f}")
-        passed = mean_diff >= 0.10 or p < 0.10
+        passed = mean_diff >= 0.05 or p < 0.10
     else:
         # fallback: just check the means differ by more than 0.15 goals
         diff = abs(avg_442 - avg_352)

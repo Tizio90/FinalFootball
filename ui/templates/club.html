@@ -1,35 +1,78 @@
 {% extends "base.html" %}
 {% block title %}{{ club }}{% endblock %}
 {% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <span>{{ club }}</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 16px;">
+    <span class="crest lg">{{ club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">{{ club }}</h1>
+      <div class="sub">Squad overview · Formation <span class="badge">{{ formation or 'auto' }}</span></div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
-  <h2>{{ club }}</h2>
-  <div class="stat-grid">
-    <div class="stat-row"><span class="label">Squad size</span><span class="value">{{ squad|length }}</span></div>
-    <div class="stat-row"><span class="label">Formation</span><span class="value">{{ formation or 'auto' }}</span></div>
-    <div class="stat-row"><span class="label">Overall CA</span><span class="value">{{ '%.2f' % strength.OVERALL }}</span></div>
-    <div class="stat-row"><span class="label">GK</span><span class="value">{{ '%.2f' % strength.GK }}</span></div>
-    <div class="stat-row"><span class="label">DEF</span><span class="value">{{ '%.2f' % strength.DEF }}</span></div>
-    <div class="stat-row"><span class="label">MID</span><span class="value">{{ '%.2f' % strength.MID }}</span></div>
-    <div class="stat-row"><span class="label">ATT</span><span class="value">{{ '%.2f' % strength.ATT }}</span></div>
+  <div class="section-head">
+    <h2><span class="icon">📊</span> Strength breakdown</h2>
+    <span class="muted small">Squad size {{ squad|length }}</span>
+  </div>
+  <div class="grid-5">
+    <div class="kpi">
+      <div class="v accent">{{ '%.2f' % strength.OVERALL }}</div>
+      <div class="l">Overall</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ '%.2f' % strength.GK }}</div>
+      <div class="l">Goalkeeper</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ '%.2f' % strength.DEF }}</div>
+      <div class="l">Defence</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ '%.2f' % strength.MID }}</div>
+      <div class="l">Midfield</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ '%.2f' % strength.ATT }}</div>
+      <div class="l">Attack</div>
+    </div>
   </div>
 </div>
 
 <div class="row">
   <div class="col">
-    <div class="card">
-      <h2>Starting XI ({{ formation or '4-3-3' }})</h2>
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2><span class="icon">⚪</span> Starting XI <span class="sub">({{ formation or '4-3-3' }})</span></h2>
+        </div>
+      </div>
       <table class="lineup">
         <thead>
-          <tr><th>Slot</th><th>Player</th><th>Age</th><th>Foot</th><th class="num">CA</th></tr>
+          <tr>
+            <th style="width: 80px;">Slot</th>
+            <th>Player</th>
+            <th class="num">Age</th>
+            <th>Foot</th>
+            <th class="num">CA</th>
+          </tr>
         </thead>
         <tbody>
         {% for p in xi %}
           <tr>
-            <td class="slot-{{ p.family }}">{{ p.slot }}</td>
-            <td>{{ p.name }}</td>
+            <td><span class="pos-tag {{ p.family }}">{{ p.slot }}</span></td>
+            <td style="font-weight: 600;">{{ p.name }}</td>
             <td class="num muted">{{ p.age }}</td>
             <td class="muted">{{ p.preferred_foot }}</td>
-            <td class="num">{{ '%.1f' % p.score }}</td>
+            <td class="num strong">{{ '%.1f' % p.score }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -37,20 +80,30 @@
     </div>
   </div>
   <div class="col">
-    <div class="card">
-      <h2>Bench</h2>
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2><span class="icon">🪑</span> Bench</h2>
+        </div>
+      </div>
       <table class="lineup">
         <thead>
-          <tr><th>Pos</th><th>Player</th><th>Age</th><th>Foot</th><th class="num">CA</th></tr>
+          <tr>
+            <th style="width: 80px;">Pos</th>
+            <th>Player</th>
+            <th class="num">Age</th>
+            <th>Foot</th>
+            <th class="num">CA</th>
+          </tr>
         </thead>
         <tbody>
         {% for p in bench %}
           <tr>
-            <td class="slot-{{ p.family }}">{{ p.family }}</td>
-            <td>{{ p.name }}</td>
+            <td><span class="pos-tag {{ p.family }}">{{ p.family }}</span></td>
+            <td style="font-weight: 600;">{{ p.name }}</td>
             <td class="num muted">{{ p.age }}</td>
             <td class="muted">{{ p.preferred_foot }}</td>
-            <td class="num">{{ '%.1f' % p.best_ca }}</td>
+            <td class="num strong">{{ '%.1f' % p.best_ca }}</td>
           </tr>
         {% endfor %}
         </tbody>
@@ -59,28 +112,123 @@
   </div>
 </div>
 
+{% if xi and xi[0].uid %}
 <div class="card">
-  <h2>Full squad ({{ squad|length }})</h2>
+  <div class="section-head">
+    <h2><span class="icon">📊</span> Star Player Attributes</h2>
+    <span class="muted small">{{ xi[0].name }}</span>
+  </div>
+  <div style="display: flex; justify-content: center; padding: 16px;">
+    <svg id="radar-chart" width="350" height="350" viewBox="0 0 350 350"></svg>
+  </div>
+</div>
+<script>
+(function() {
+  const uid = {{ xi[0].uid if xi[0].uid else 'null' }};
+  if (!uid) return;
+  fetch(`/api/player/${uid}/radar`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.data) return;
+      const svg = document.getElementById('radar-chart');
+      const cx = 175, cy = 175, maxR = 130;
+      const categories = Object.keys(data.data);
+      const n = categories.length;
+      const angles = categories.map((_, i) => (Math.PI * 2 * i) / n - Math.PI / 2);
+
+      // Grid circles
+      for (let r = 0.25; r <= 1.0; r += 0.25) {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', cx); circle.setAttribute('cy', cy);
+        circle.setAttribute('r', maxR * r);
+        circle.setAttribute('fill', 'none');
+        circle.setAttribute('stroke', '#cbd5e1');
+        circle.setAttribute('stroke-width', '1');
+        svg.appendChild(circle);
+      }
+      // Axes + labels
+      categories.forEach((cat, i) => {
+        const x = cx + Math.cos(angles[i]) * maxR;
+        const y = cy + Math.sin(angles[i]) * maxR;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+        line.setAttribute('x2', x); line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#cbd5e1'); line.setAttribute('stroke-width', '1');
+        svg.appendChild(line);
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        const lx = cx + Math.cos(angles[i]) * (maxR + 20);
+        const ly = cy + Math.sin(angles[i]) * (maxR + 20);
+        label.setAttribute('x', lx); label.setAttribute('y', ly);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('dominant-baseline', 'middle');
+        label.setAttribute('font-size', '11');
+        label.setAttribute('fill', '#64748b');
+        label.textContent = cat;
+        svg.appendChild(label);
+      });
+      // Data polygon
+      const points = categories.map((cat, i) => {
+        const val = data.data[cat] / 100;
+        const x = cx + Math.cos(angles[i]) * maxR * val;
+        const y = cy + Math.sin(angles[i]) * maxR * val;
+        return `${x},${y}`;
+      }).join(' ');
+      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      polygon.setAttribute('points', points);
+      polygon.setAttribute('fill', 'rgba(22, 163, 74, 0.3)');
+      polygon.setAttribute('stroke', '#16a34a');
+      polygon.setAttribute('stroke-width', '2');
+      svg.appendChild(polygon);
+      // Dots at vertices
+      categories.forEach((cat, i) => {
+        const val = data.data[cat] / 100;
+        const x = cx + Math.cos(angles[i]) * maxR * val;
+        const y = cy + Math.sin(angles[i]) * maxR * val;
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', 4);
+        dot.setAttribute('fill', '#16a34a');
+        svg.appendChild(dot);
+      });
+    })
+    .catch(err => console.log('Radar fetch failed:', err));
+})();
+</script>
+{% endif %}
+
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">👥</span> Full squad <span class="sub">({{ squad|length }} players)</span></h2>
+    </div>
+  </div>
   <table>
     <thead>
-      <tr><th>Name</th><th>Age</th><th>Position</th><th>Foot</th>
-          <th>Morale</th>
-          <th class="num">GK</th><th class="num">DEF</th><th class="num">MID</th><th class="num">ATT</th></tr>
+      <tr>
+        <th>Name</th>
+        <th class="num">Age</th>
+        <th>Position</th>
+        <th>Foot</th>
+        <th>Morale</th>
+        <th class="num">GK</th>
+        <th class="num">DEF</th>
+        <th class="num">MID</th>
+        <th class="num">ATT</th>
+      </tr>
     </thead>
     <tbody>
     {% for p in squad %}
       <tr>
-        <td>{{ p.name }}</td>
+        <td style="font-weight: 600;">{{ p.name }}</td>
         <td class="num muted">{{ p.age }}</td>
         <td class="muted">{{ p.primary_role }}</td>
         <td class="muted">{{ p.preferred_foot }}</td>
         <td>
           {% set m = morale_map.get(p.uid, 50) if morale_map else 50 %}
-          {% if m >= 75 %}<span style="color: #15803d; font-weight: 600;">Happy</span>
-          {% elif m >= 55 %}<span style="color: #15803d;">Content</span>
-          {% elif m >= 35 %}<span style="color: #ca8a04; font-weight: 500;">Uneasy</span>
-          {% elif m >= 20 %}<span style="color: #b45309; font-weight: 600;">Frustrated</span>
-          {% else %}<span style="color: #b91c1c; font-weight: 600;">Angry</span>
+          {% if m >= 75 %}<span class="pill green">Happy</span>
+          {% elif m >= 55 %}<span class="pill green">Content</span>
+          {% elif m >= 35 %}<span class="pill amber">Uneasy</span>
+          {% elif m >= 20 %}<span class="pill amber">Frustrated</span>
+          {% else %}<span class="pill red">Angry</span>
           {% endif %}
         </td>
         <td class="num">{{ '%.1f' % p.ca.GK }}</td>
@@ -93,5 +241,8 @@
   </table>
 </div>
 
-<a href="/" class="btn secondary">← Home</a>
+<div class="btn-group">
+  <a href="/" class="btn secondary">← Home</a>
+</div>
+
 {% endblock %}

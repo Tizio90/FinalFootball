@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Cup — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Cup</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg" style="background: linear-gradient(135deg, var(--primary-500), var(--accent-600));">🏆</span>
+    <div>
+      <h1 style="margin: 0;">Continental Cup</h1>
+      <div class="sub">Single-elimination tournament · 32 teams from your league</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card">
+  {% if not cup_exists %}
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>The cup draw hasn't been generated yet. Click below to create a 32-team single-elimination tournament from the clubs in your league.</div>
+  </div>
+  <form action="/career/{{ career.id }}/cup/generate" method="post">
+    <button type="submit" class="btn large">🎲 Generate Cup Draw</button>
+  </form>
+  {% elif pending %}
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v" style="font-size: 16px;">{{ pending[0].round_name }}</div>
+      <div class="l">Current round</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{{ pending|length }}</div>
+      <div class="l">Fixtures pending</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ played|length }}</div>
+      <div class="l">Matches played</div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <form action="/career/{{ career.id }}/cup/play" method="post">
+    <button type="submit" class="btn large">▶ Play {{ pending[0].round_name }}</button>
+  </form>
+  {% else %}
+  <div style="text-align: center; padding: 20px 0;">
+    <div style="font-size: 48px; margin-bottom: 8px;">🏆</div>
+    <h2 style="margin: 0 0 6px;">Cup complete</h2>
+    <p class="muted" style="margin: 0 0 16px;">All rounds of this season's continental cup have been played.</p>
+    <span class="pill green">✓ Tournament finished</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if pending %}
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">📅</span> Upcoming fixtures — {{ pending[0].round_name }}</h2>
+      <span class="muted small">{{ pending|length }} matches</span>
+    </div>
+  </div>
+  <div style="padding: 4px 0;">
+    {% for f in pending %}
+      {% set is_user = f.home_club == career.club or f.away_club == career.club %}
+      <div class="fixture-row" {% if is_user %}style="background: #fef9c3; box-shadow: inset 3px 0 0 var(--accent);"{% endif %}>
+        <div class="home">
+          {{ f.home_club }}
+          {% if f.home_club == career.club %}<span class="pill green" style="margin-left: 6px;">YOU</span>{% endif %}
+        </div>
+        <div class="score"><span class="scoreline vs">vs</span></div>
+        <div class="away">
+          {{ f.away_club }}
+          {% if f.away_club == career.club %}<span class="pill green" style="margin-left: 6px;">YOU</span>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if played %}
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">📊</span> Results</h2>
+      <span class="muted small">{{ played|length }} matches played</span>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 130px;">Round</th>
+        <th>Home</th>
+        <th class="num" style="width: 100px;">Score</th>
+        <th>Away</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in played %}
+      <tr {% if c.home_club == career.club or c.away_club == career.club %}style="background: #fef9c3;"{% endif %}>
+        <td><span class="badge">{{ c.round_name }}</span></td>
+        <td>
+          {{ c.home_club }}
+          {% if c.home_club == career.club %}<span class="pill green" style="margin-left: 4px;">YOU</span>{% endif %}
+        </td>
+        <td class="num strong">{{ c.home_score }} – {{ c.away_score }}</td>
+        <td>
+          {{ c.away_club }}
+          {% if c.away_club == career.club %}<span class="pill green" style="margin-left: 4px;">YOU</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+</div>
+
+{% endblock %}

@@ -1,10 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ error_title }}{% endblock %}
 {% block content %}
-<div class="card" style="text-align: center; padding: 40px;">
-  <h2 style="color: var(--card-r);">{{ error_title }}</h2>
-  <p style="font-size: 16px; margin: 20px 0;">{{ error_message|safe }}</p>
-  <pre style="background: #f3f4f6; padding: 12px; border-radius: 4px; display: inline-block; text-align: left; font-size: 13px;">cd /home/z/my-project/download/football_sim
-python run.py ingest</pre>
+
+<div class="card" style="text-align: center; padding: 48px 32px; max-width: 640px; margin: 40px auto;">
+  <div style="font-size: 56px; margin-bottom: 12px;">⚠</div>
+  <h1 style="color: var(--card-r); margin: 0 0 12px; font-size: 24px;">{{ error_title }}</h1>
+  <p style="font-size: 15px; margin: 16px 0 24px; color: var(--text-soft); line-height: 1.6;">{{ error_message|safe }}</p>
+
+  <div style="text-align: left; max-width: 480px; margin: 0 auto;">
+    <div class="muted small" style="margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">To fix this, run:</div>
+    <pre class="code-block"><span class="prompt">$ </span>cd /home/z/my-project/download/football_sim
+<span class="prompt">$ </span>python run.py ingest</pre>
+  </div>
+
+  <div class="btn-group" style="justify-content: center; margin-top: 20px;">
+    <a href="/" class="btn">← Back to home</a>
+  </div>
 </div>
+
 {% endblock %}

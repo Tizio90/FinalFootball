@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Season Review — {{ career.club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Season Review</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">📊 Season Review</h1>
+      <div class="sub">{{ career.club }} · end-of-season summary</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📈</span> Season summary</h2>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="v">{{ summary.total_matches }}</div>
+      <div class="l">Total matches</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ summary.total_goals }}</div>
+      <div class="l">Total goals</div>
+    </div>
+    {% if summary.user_record %}
+    <div class="kpi">
+      <div class="v accent">{{ summary.user_record.position }}{{ ['st','nd','rd'][summary.user_record.position-1] if summary.user_record.position <= 3 else 'th' }}</div>
+      <div class="l">Your position</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ summary.user_record.won }}W {{ summary.user_record.drawn }}D {{ summary.user_record.lost }}L</div>
+      <div class="l">Your record</div>
+    </div>
+    <div class="kpi">
+      <div class="v">{{ summary.user_record.gf }} : {{ summary.user_record.ga }}</div>
+      <div class="l">Goals for / against</div>
+    </div>
+    <div class="kpi">
+      <div class="v accent">{{ summary.user_record.points }}</div>
+      <div class="l">Points</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2><span class="icon">⚽</span> Top Scorers</h2>
+          <span class="muted small">Golden Boot race</span>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th class="num" style="width: 50px;">#</th><th>Player</th><th>Club</th><th class="num">Goals</th></tr></thead>
+        <tbody>
+        {% for s in summary.top_scorers %}
+          <tr {% if s.club == career.club %}style="background: #fef9c3; font-weight: 600;"{% endif %}>
+            <td class="num muted">
+              {% if loop.index == 1 %}🥇
+              {% elif loop.index == 2 %}🥈
+              {% elif loop.index == 3 %}🥉
+              {% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td style="font-weight: 600;">{{ s.name }}</td>
+            <td class="muted">{{ s.club }}{% if s.club == career.club %} <span class="pill green" style="margin-left: 2px;">YOU</span>{% endif %}</td>
+            <td class="num"><strong style="font-size: 15px; color: var(--accent-600);">{{ s.goals }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card flush">
+      <div class="card-head">
+        <div class="section-head" style="margin-bottom: 0;">
+          <h2><span class="icon">🅰️</span> Top Assists</h2>
+          <span class="muted small">Playmaker of the season</span>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th class="num" style="width: 50px;">#</th><th>Player</th><th>Club</th><th class="num">Assists</th></tr></thead>
+        <tbody>
+        {% for s in summary.top_assists %}
+          <tr {% if s.club == career.club %}style="background: #fef9c3; font-weight: 600;"{% endif %}>
+            <td class="num muted">
+              {% if loop.index == 1 %}🥇
+              {% elif loop.index == 2 %}🥈
+              {% elif loop.index == 3 %}🥉
+              {% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td style="font-weight: 600;">{{ s.name }}</td>
+            <td class="muted">{{ s.club }}{% if s.club == career.club %} <span class="pill green" style="margin-left: 2px;">YOU</span>{% endif %}</td>
+            <td class="num"><strong style="font-size: 15px; color: var(--accent-600);">{{ s.assists }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📋</span> Final Standings</h2>
+    <span class="pill green">Final</span>
+  </div>
+  <table class="standings">
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Club</th>
+        <th class="num">P</th>
+        <th class="num">W</th>
+        <th class="num">D</th>
+        <th class="num">L</th>
+        <th class="num">GF</th>
+        <th class="num">GA</th>
+        <th class="num">GD</th>
+        <th class="num">Pts</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in summary.standings %}
+      {% set position = loop.index %}
+      {% set n_clubs = summary.standings|length %}
+      <tr class="{% if row.club == career.club %}user-row{% elif position <= 3 %}zone-ucl{% elif position > n_clubs - 3 %}zone-releg{% endif %}">
+        <td class="pos"><span class="zone-bar"></span>{{ position }}</td>
+        <td>
+          {{ row.club }}
+          {% if row.club == career.club %} <span class="pill green" style="margin-left: 4px;">YOU</span>{% endif %}
+        </td>
+        <td class="num">{{ row.played }}</td>
+        <td class="num">{{ row.won }}</td>
+        <td class="num">{{ row.drawn }}</td>
+        <td class="num">{{ row.lost }}</td>
+        <td class="num">{{ row.gf }}</td>
+        <td class="num">{{ row.ga }}</td>
+        <td class="num">{{ '%+d' % row.gd }}</td>
+        <td class="num pts">{{ row.points }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="legend">
+    <span class="item"><span class="swatch" style="background: var(--accent);"></span> Your club</span>
+    <span class="item"><span class="swatch" style="background: var(--zone-ucl);"></span> Champions League</span>
+    <span class="item"><span class="swatch" style="background: var(--zone-releg);"></span> Relegation</span>
+  </div>
+</div>
+
+{% if cup_results %}
+<div class="card flush">
+  <div class="card-head">
+    <div class="section-head" style="margin-bottom: 0;">
+      <h2><span class="icon">🏆</span> Cup Results</h2>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 130px;">Round</th>
+        <th>Home</th>
+        <th class="num" style="width: 100px;">Score</th>
+        <th>Away</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in cup_results %}
+      <tr {% if c.home_club == career.club or c.away_club == career.club %}style="background: #fef9c3;"{% endif %}>
+        <td><span class="badge">{{ c.round_name }}</span></td>
+        <td>
+          {{ c.home_club }}
+          {% if c.home_club == career.club %}<span class="pill green" style="margin-left: 4px;">YOU</span>{% endif %}
+        </td>
+        <td class="num strong">{{ c.home_score }} – {{ c.away_score }}</td>
+        <td>
+          {{ c.away_club }}
+          {% if c.away_club == career.club %}<span class="pill green" style="margin-left: 4px;">YOU</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/" class="btn secondary">Home</a>
+</div>
+
+{% endblock %}

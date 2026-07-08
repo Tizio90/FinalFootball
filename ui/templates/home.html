@@ -2,38 +2,50 @@
 {% block title %}Football Sim — Home{% endblock %}
 {% block content %}
 
-<div class="card">
-  <h2>Database</h2>
-  <div class="stat-grid">
-    <div class="stat-row"><span class="label">Players</span><span class="value">{{ stats.players|toLocale }}</span></div>
-    <div class="stat-row"><span class="label">Clubs</span><span class="value">{{ stats.clubs|toLocale }}</span></div>
-    <div class="stat-row"><span class="label">Nations</span><span class="value">{{ stats.nations }}</span></div>
-    <div class="stat-row"><span class="label">Divisions</span><span class="value">{{ stats.divisions }}</span></div>
-    <div class="stat-row"><span class="label">Playable leagues</span><span class="value">{{ stats.playable }}</span></div>
+<section class="hero">
+  <h1>⚽ Football Manager Sim</h1>
+  <p class="tagline">A full-blown football management simulation backed by a real-world player database. Pick a club, set your tactics, play through a season, sign new players, and chase continental glory.</p>
+  <div class="cta-row">
+    <a href="/career/new" class="btn large">▶ Start a new career</a>
+    <a href="/nations" class="btn ghost large">🌐 Browse nations</a>
   </div>
-</div>
-
-<div class="card" style="border-color: var(--accent); background: #f0fdf4;">
-  <h2 style="color: var(--accent);">🎮 Manager Mode</h2>
-  <p class="muted" style="margin: 0 0 12px;">Pick a club, choose your formation and mentality, set your XI, and play through a season match by match.</p>
-  <a href="/career/new" class="btn">▶ Start a new career</a>
-</div>
+  <div class="stats">
+    <div class="stat"><div class="num">{{ stats.players|toLocale }}</div><div class="lbl">Players</div></div>
+    <div class="stat"><div class="num">{{ stats.clubs|toLocale }}</div><div class="lbl">Clubs</div></div>
+    <div class="stat"><div class="num">{{ stats.nations }}</div><div class="lbl">Nations</div></div>
+    <div class="stat"><div class="num">{{ stats.divisions }}</div><div class="lbl">Divisions</div></div>
+    <div class="stat"><div class="num">{{ stats.playable }}</div><div class="lbl">Playable leagues</div></div>
+  </div>
+</section>
 
 {% if careers %}
 <div class="card">
-  <h2>Your careers</h2>
+  <div class="section-head">
+    <h2><span class="icon">📋</span> Your careers</h2>
+  </div>
   <table>
     <thead>
-      <tr><th>Club</th><th>Formation</th><th>Mentality</th><th>Updated</th><th></th></tr>
+      <tr>
+        <th>Club</th>
+        <th>Formation</th>
+        <th>Mentality</th>
+        <th>Updated</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for c in careers %}
       <tr>
-        <td><strong>{{ c.club }}</strong></td>
-        <td class="muted">{{ c.formation }}</td>
-        <td class="muted">{{ c.mentality }}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="crest sm">{{ c.club[:2]|upper }}</span>
+            <strong>{{ c.club }}</strong>
+          </div>
+        </td>
+        <td><span class="badge">{{ c.formation }}</span></td>
+        <td><span class="pill {% if c.mentality == 'attacking' %}green{% elif c.mentality == 'defensive' %}amber{% endif %}">{{ c.mentality }}</span></td>
         <td class="muted">{{ c.updated_at[:19].replace('T', ' ') }}</td>
-        <td><a href="/career/{{ c.id }}" class="btn small">Continue</a></td>
+        <td class="right"><a href="/career/{{ c.id }}" class="btn small">Continue →</a></td>
       </tr>
     {% endfor %}
     </tbody>
@@ -41,58 +53,74 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <h2>Quick start — popular leagues</h2>
-  <p class="muted" style="margin: 0 0 12px;">Click a league to simulate a full double round-robin season (auto, no management):</p>
-  <table>
-    <thead>
-      <tr><th>League</th><th>Nation</th><th class="num">Clubs</th><th class="num">Players</th><th></th></tr>
-    </thead>
-    <tbody>
-    {% for d in quick_leagues %}
-      <tr>
-        <td><a href="/division/{{ d.id }}">{{ d.name }}</a></td>
-        <td class="muted">{{ d.nation_name }}</td>
-        <td class="num">{{ d.club_count }}</td>
-        <td class="num muted">{{ d.player_count|toLocale }}</td>
-        <td>
-          <form action="/division/{{ d.id }}/season/new" method="post" class="inline">
-            <input type="hidden" name="mode" value="all">
-            <input type="hidden" name="seed" value="1">
-            <input type="hidden" name="double" value="y">
-            <button type="submit" class="btn small">▶ Sim season</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="card card-accent">
+  <div class="section-head">
+    <h2><span class="icon">🎮</span> Manager Mode</h2>
+  </div>
+  <p class="muted" style="margin: 0 0 14px;">Pick a club, choose your formation and mentality, set your XI, and play through a season match by match. Sign new players in the transfer market and chase the cup.</p>
+  <a href="/career/new" class="btn">▶ Start a new career</a>
 </div>
 
 <div class="card">
-  <h2>Browse all leagues</h2>
-  <p style="margin: 0 0 12px;">
-    <a href="/nations" class="btn">🌐 Browse by Nation ({{ stats.nations }})</a>
-  </p>
-  <p class="muted" style="margin: 0;">{{ stats.playable }} leagues have enough clubs (≥4) with enough players (≥14) to simulate a season.</p>
+  <div class="section-head">
+    <h2><span class="icon">⚡</span> Quick start — popular leagues</h2>
+    <span class="muted small">Click to simulate a full double round-robin season (auto, no management)</span>
+  </div>
+  <div class="grid-3">
+    {% for d in quick_leagues %}
+    <div style="border:1px solid var(--border); border-radius: var(--r-md); padding: 14px 16px; background: var(--bg-soft); display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+        <div>
+          <a href="/division/{{ d.id }}" style="font-weight:600; color: var(--primary); font-size: 14px;">{{ d.name }}</a>
+          <div class="muted small">{{ d.nation_name }}</div>
+        </div>
+        <span class="pill green">{{ d.club_count }} clubs</span>
+      </div>
+      <div class="muted small">{{ d.player_count|toLocale }} players in database</div>
+      <form action="/division/{{ d.id }}/season/new" method="post" class="inline" style="margin-top: 4px;">
+        <input type="hidden" name="mode" value="all">
+        <input type="hidden" name="seed" value="1">
+        <input type="hidden" name="double" value="y">
+        <button type="submit" class="btn small block">▶ Sim season</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🌐</span> Browse all leagues</h2>
+    <a href="/nations" class="btn secondary small">Browse by nation ({{ stats.nations }})</a>
+  </div>
+  <p class="muted" style="margin: 0;">{{ stats.playable }} leagues have enough clubs (≥4) with enough players (≥14) to simulate a season. Use the nation browser to drill into any of {{ stats.nations }} countries.</p>
 </div>
 
 {% if seasons %}
 <div class="card">
-  <h2>Recent seasons</h2>
+  <div class="section-head">
+    <h2><span class="icon">📅</span> Recent seasons</h2>
+  </div>
   <table>
     <thead>
-      <tr><th>Season ID</th><th class="num">Clubs</th><th class="num">Rounds</th>
-          <th>Created</th><th></th></tr>
+      <tr>
+        <th>Season ID</th>
+        <th>Division</th>
+        <th class="num">Clubs</th>
+        <th class="num">Rounds</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
     </thead>
     <tbody>
     {% for s in seasons %}
       <tr>
-        <td><code>{{ s.id }}</code>{% if s.division_name %}<br><span class="muted" style="font-size:11px;">{{ s.division_name }}</span>{% endif %}</td>
+        <td><code>{{ s.id }}</code></td>
+        <td class="muted">{% if s.division_name %}{{ s.division_name }}{% else %}—{% endif %}</td>
         <td class="num">{{ (s.clubs_json|fromjson).__len__() }}</td>
         <td class="num">{{ s.rounds }}</td>
         <td class="muted">{{ s.created_at[:19].replace('T', ' ') }}</td>
-        <td><a href="/season/{{ s.id }}" class="btn small">Open</a></td>
+        <td class="right"><a href="/season/{{ s.id }}" class="btn small secondary">Open →</a></td>
       </tr>
     {% endfor %}
     </tbody>

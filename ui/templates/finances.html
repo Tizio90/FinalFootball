@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Finances — {{ career.club }}{% endblock %}
+{% block content %}
+
+{% set balance_positive = finances.balance >= 0 %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/career/{{ career.id }}">{{ career.club }}</a>
+  <span class="sep">/</span>
+  <span>Finances</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 14px;">
+    <span class="crest lg">{{ career.club[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">💰 Finances</h1>
+      <div class="sub">{{ career.club }} · track income, expenses and the board's confidence</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  </div>
+</div>
+
+<div class="card" style="border-color: {% if balance_positive %}var(--accent){% else %}var(--card-r){% endif %}; background: {% if balance_positive %}linear-gradient(180deg, var(--accent-50) 0%, #fff 100%){% else %}linear-gradient(180deg, #fef2f2 0%, #fff 100%){% endif %};">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px;">
+    <div>
+      <div class="muted small" style="text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Season balance</div>
+      <div style="font-family: var(--font-head); font-size: 40px; font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; color: {% if balance_positive %}var(--accent-600){% else %}var(--card-r){% endif %}; margin-top: 4px;">
+        {% if balance_positive %}+{% endif %}${{ finances.balance|toLocale }}
+      </div>
+      <div class="muted small" style="margin-top: 4px;">
+        {% if balance_positive %}✓ Club is profitable this season{% else %}⚠ Club is operating at a loss{% endif %}
+      </div>
+    </div>
+    <div style="display: flex; gap: 28px; align-items: center;">
+      <div style="text-align: center;">
+        <div class="muted small" style="text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Income</div>
+        <div class="strong tabular" style="font-size: 20px; color: var(--accent-600);">${{ finances.income_total|toLocale }}</div>
+      </div>
+      <div style="font-size: 24px; color: var(--muted-2); font-weight: 300;">−</div>
+      <div style="text-align: center;">
+        <div class="muted small" style="text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Expenses</div>
+        <div class="strong tabular" style="font-size: 20px; color: var(--card-r);">${{ finances.expenses_total|toLocale }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">📈</span> Income breakdown</h2>
+        <span class="pill green">+${{ finances.income_total|toLocale }}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="v accent">${{ finances.income_tv|toLocale }}</div>
+          <div class="l">📺 TV money</div>
+        </div>
+        <div class="kpi">
+          <div class="v accent">${{ finances.income_matchday|toLocale }}</div>
+          <div class="l">🏟 Matchday</div>
+        </div>
+        <div class="kpi">
+          <div class="v accent">${{ finances.income_prize|toLocale }}</div>
+          <div class="l">🏆 Prize money</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">📉</span> Expense breakdown</h2>
+        <span class="pill red">−${{ finances.expenses_total|toLocale }}</span>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="v">${{ finances.expenses_wages|toLocale }}</div>
+          <div class="l">⚽ Player wages</div>
+        </div>
+        <div class="kpi">
+          <div class="v">${{ finances.expenses_staff|toLocale }}</div>
+          <div class="l">👥 Staff wages</div>
+        </div>
+        <div class="kpi">
+          <div class="v">{{ '%.0f' % ((finances.expenses_total / finances.income_total * 100) if finances.income_total else 0) }}%</div>
+          <div class="l">Wage / income ratio</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="flex: 1.3;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">📊</span> Weekly wage bill</h2>
+        <span class="pill">{{ staff|length }} staff</span>
+      </div>
+      <div class="kpi-grid" style="margin-bottom: 16px;">
+        <div class="kpi">
+          <div class="v">${{ wage_bill|toLocale }}</div>
+          <div class="l">Player wages / week</div>
+        </div>
+        <div class="kpi">
+          <div class="v">${{ staff_wages|toLocale }}</div>
+          <div class="l">Staff wages / week</div>
+        </div>
+        <div class="kpi">
+          <div class="v accent">${{ (wage_bill + staff_wages)|toLocale }}</div>
+          <div class="l">Total / week</div>
+        </div>
+        <div class="kpi">
+          <div class="v">${{ ((wage_bill + staff_wages) * 38)|toLocale }}</div>
+          <div class="l">Projected / season</div>
+        </div>
+      </div>
+
+      {% if staff %}
+      <div class="divider"></div>
+      <div class="section-head">
+        <h2 style="font-size: 14px;"><span class="icon">👥</span> Staff wage detail</h2>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role</th>
+            <th class="num">Rating</th>
+            <th class="num">Wage / wk</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for s in staff %}
+          <tr>
+            <td style="font-weight: 600;">{{ s.name }}</td>
+            <td class="muted">{{ s.role|replace('_', ' ')|title }}</td>
+            <td class="num">{{ s.rating }}</td>
+            <td class="num">${{ s.wage|toLocale }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty" style="padding: 16px;">
+        <div class="icon">👥</div>
+        <div>No staff hired — <a href="/career/{{ career.id }}/staff">hire staff</a> to add wages here.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col" style="flex: 1;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">🏛</span> Board confidence</h2>
+        <span class="pill {% if board_confidence >= 70 %}green{% elif board_confidence >= 40 %}amber{% else %}red{% endif %}">
+          {% if board_confidence >= 75 %}Strong{% elif board_confidence >= 55 %}Stable{% elif board_confidence >= 35 %}Wavering{% else %}Critical{% endif %}
+        </span>
+      </div>
+      <div style="text-align: center; padding: 8px 0 14px;">
+        <div style="font-family: var(--font-head); font-size: 44px; font-weight: 800; line-height: 1; color: {% if board_confidence >= 70 %}var(--accent-600){% elif board_confidence >= 40 %}#b45309{% else %}var(--card-r){% endif %};">
+          {{ board_confidence }}
+          <span style="font-size: 20px; color: var(--muted);">/ 100</span>
+        </div>
+        <div class="muted small" style="margin-top: 6px;">The board's view of your management</div>
+      </div>
+      <div style="height: 12px; background: var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 12px;">
+        <div style="width: {{ board_confidence }}%; height: 100%; background: {% if board_confidence >= 70 %}var(--accent-600){% elif board_confidence >= 40 %}#f59e0b{% else %}var(--card-r){% endif %}; transition: width .3s ease;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 16px;">
+        <span>Sacked</span>
+        <span>Stable</span>
+        <span>Excellent</span>
+      </div>
+
+      <div class="alert {% if board_confidence >= 55 %}info{% else %}warning{% endif %}" style="margin: 0;">
+        <span class="icon">{% if board_confidence >= 55 %}📊{% else %}⚠{% endif %}</span>
+        <div>
+          {% if board_confidence >= 75 %}
+            <strong>The board is delighted.</strong> Expect a generous transfer budget next window.
+          {% elif board_confidence >= 55 %}
+            <strong>The board is satisfied.</strong> Continue meeting expectations to keep their support.
+          {% elif board_confidence >= 35 %}
+            <strong>The board is uneasy.</strong> A few more poor results could cost you your job.
+          {% else %}
+            <strong>You're on thin ice.</strong> Another bad run and you'll be sacked.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">💡</span> Quick tips</h2>
+      </div>
+      <div class="stat-list">
+        <div class="row-item"><span class="lbl">Wage-to-income ratio</span><span class="val tabular">{{ '%.0f' % ((finances.expenses_total / finances.income_total * 100) if finances.income_total else 0) }}%</span></div>
+        <div class="row-item"><span class="lbl">Staff cost share</span><span class="val tabular">{{ '%.1f' % ((staff_wages / (wage_bill + staff_wages) * 100) if (wage_bill + staff_wages) else 0) }}%</span></div>
+        <div class="row-item"><span class="lbl">Profitable?</span><span class="val {% if balance_positive %}text-accent{% else %}text-muted{% endif %}">{% if balance_positive %}Yes ✓{% else %}No ✗{% endif %}</span></div>
+      </div>
+      <div class="muted small" style="margin-top: 10px;">
+        💡 A healthy club keeps wages under <strong>70%</strong> of income. Sell high earners or finish higher to boost prize money.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/career/{{ career.id }}" class="btn secondary">← Back to career</a>
+  <a href="/career/{{ career.id }}/staff" class="btn secondary">👥 Manage staff</a>
+  <a href="/career/{{ career.id }}/transfers" class="btn secondary">💰 Transfer market</a>
+</div>
+
+{% endblock %}

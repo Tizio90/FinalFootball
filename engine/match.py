@@ -114,13 +114,14 @@ FATIGUE_MIN_MULTIPLIER = 0.55
 # Counter-attacks
 COUNTER_CHANCE = 0.10
 
-# Fouls / cards
-FOUL_MARGIN_THRESHOLD = 15.0   # 0-100 scale (was 3.0 on 1-20)
-YELLOW_CARD_BASE = 0.04
-RED_CARD_BASE = 0.002
+# Fouls / cards — Phase 3 tuning fix: cards were way too rare
+# (was 0.76 yellows/match vs real ~3.5; raised bases + multipliers)
+FOUL_MARGIN_THRESHOLD = 15.0   # 0-100 scale
+YELLOW_CARD_BASE = 0.22
+RED_CARD_BASE = 0.012
 
-# Injuries (per phase per starter)
-INJURY_BASE_PROB = 0.00008
+# Injuries — Phase 3 tuning fix: were too rare (0.18/match vs real ~0.5)
+INJURY_BASE_PROB = 0.00035
 INJURY_OPP_AGG_MULT = 0.4
 
 # Set pieces
@@ -529,7 +530,8 @@ class MatchEngine:
         # Was 0 early in 0-100 tuning but that gave too many goals for
         # mid-quality clubs (CA ~67). +3.0 gives a slight edge that keeps
         # avg goals in the 2.0-3.0 band across club quality levels.
-        save_roll = keeper_quality + 3.0 + self.rng.gauss(0, 7.5)
+        # Phase 3 fix: reduced from +3.0 to +1.5 (0-0 frequency was too high at 22%)
+        save_roll = keeper_quality + 1.5 + self.rng.gauss(0, 7.5)
         shot_final = shot_roll + self.rng.gauss(0, 5.0)
 
         if save_roll >= shot_final:
@@ -595,8 +597,9 @@ class MatchEngine:
         dirt = self._eff(tackler, "Dirt") or 50
         card_factor = (agg + dirt) / 200.0
         strict_factor = self.referee_strictness / 20.0  # referee is 5-18, not 0-100
-        yellow_chance = YELLOW_CARD_BASE + card_factor * strict_factor * 0.20
-        red_chance = RED_CARD_BASE + card_factor * strict_factor * 0.01
+        # Phase 3 fix: raised multiplier from 0.20 to 0.35 for yellows, 0.01 to 0.02 for reds
+        yellow_chance = YELLOW_CARD_BASE + card_factor * strict_factor * 0.35
+        red_chance = RED_CARD_BASE + card_factor * strict_factor * 0.02
 
         roll = self.rng.random()
         if roll < red_chance:
