@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ player.name }} — Football Sim{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/editor">Data Editor</a>
+  <span class="sep">/</span>
+  <span>{{ player.name }}</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 16px;">
+    <span class="crest lg">{{ player.name[:2]|upper }}</span>
+    <div>
+      <h1 style="margin: 0;">✏️ {{ player.name }}</h1>
+      <div class="sub">
+        {% if player.primary_family %}<span class="pos-tag {{ player.primary_family }}">{{ player.primary_family }}</span>{% endif %}
+        <code>{{ player.position_raw or '—' }}</code> ·
+        {{ player.club or 'Free agent' }} ·
+        Age {{ player.age }}
+        {% if player.preferred_foot %} · {{ player.preferred_foot }} foot{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/editor" class="btn secondary">← Back to search</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="alert warning">
+    <span class="icon">⚠</span>
+    <div>
+      You're editing <strong>{{ player.name }}</strong> directly in the database. Each attribute save writes immediately to the
+      <code>player_attributes</code> table and affects every match simulation going forward. Values must be integers
+      between <strong>0</strong> and <strong>100</strong>.
+    </div>
+  </div>
+
+  <div class="kpi-grid" style="margin-top: 14px;">
+    <div class="kpi"><div class="v">{{ player.age }}</div><div class="l">Age</div></div>
+    <div class="kpi"><div class="v accent">{{ player.position_raw or '—' }}</div><div class="l">Position</div></div>
+    <div class="kpi"><div class="v" style="font-size: 14px;">{{ player.club or 'Free agent' }}</div><div class="l">Club</div></div>
+    <div class="kpi"><div class="v" style="font-size: 14px;">{{ player.preferred_foot or '—' }}</div><div class="l">Preferred foot</div></div>
+    <div class="kpi"><div class="v" style="font-size: 12px; font-family: var(--font-mono);">{{ player.uid[:12] }}…</div><div class="l">UID</div></div>
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Attribute group definitions: (label, color, [(key, display_name)]) #}
+{# ------------------------------------------------------------------ #}
+{% set technical = [
+  ('Cor', 'Corners'), ('Cro', 'Crossing'), ('Dri', 'Dribbling'), ('Fin', 'Finishing'),
+  ('Fir', 'First Touch'), ('Fre', 'Free Kick Taking'), ('Hea', 'Heading'),
+  ('Lon', 'Long Shots'), ('L Th', 'Long Throws'), ('Mar', 'Marking'), ('Pas', 'Passing'),
+  ('Pen', 'Penalty Taking'), ('Tck', 'Tackling'), ('Tec', 'Technique')
+] %}
+{% set mental = [
+  ('Agg', 'Aggression'), ('Ant', 'Anticipation'), ('Bra', 'Bravery'),
+  ('Cmp', 'Composure'), ('Cnt', 'Concentration'), ('Dec', 'Decisions'),
+  ('Det', 'Determination'), ('Fla', 'Flair'), ('Ldr', 'Leadership'),
+  ('OtB', 'Off The Ball'), ('Pos', 'Positioning'), ('Tea', 'Teamwork'),
+  ('Vis', 'Vision'), ('Wor', 'Work Rate')
+] %}
+{% set physical = [
+  ('Acc', 'Acceleration'), ('Agi', 'Agility'), ('Bal', 'Balance'),
+  ('Jum', 'Jumping Reach'), ('Pac', 'Pace'), ('Sta', 'Stamina'),
+  ('Str', 'Strength'), ('NatFit', 'Natural Fitness')
+] %}
+{% set goalkeeping = [
+  ('Aer', 'Aerial Reach'), ('Cmd', 'Command Of Area'), ('Com', 'Communication'),
+  ('Ecc', 'Eccentricity'), ('Han', 'Handling'), ('Kic', 'Kicking'),
+  ('1v1', 'One On Ones'), ('Pun', 'Punching'), ('Ref', 'Reflexes'),
+  ('TRO', 'Rushing Out'), ('Thr', 'Throwing')
+] %}
+{% set hidden = [
+  ('Ada', 'Adaptability'), ('Amb', 'Ambition'), ('Cons', 'Consistency'),
+  ('Dirt', 'Dirtiness'), ('Imp M', 'Important Matches'), ('Inj Pr', 'Injury Proneness'),
+  ('Loy', 'Loyalty'), ('Pres', 'Pressure'), ('Prof', 'Professionalism'),
+  ('Spor', 'Sportsmanship'), ('Temp', 'Temperament'), ('Vers', 'Versatility')
+] %}
+
+{% macro attr_row(key, label) %}
+  {% set val = attrs[key] if attrs[key] is not none else 0 %}
+  {% set tier = 'gold' if val >= 80 else ('silver' if val >= 60 else ('bronze' if val >= 40 else 'low')) %}
+  <tr>
+    <td style="width: 80px;"><code class="muted">{{ key }}</code></td>
+    <td>{{ label }}</td>
+    <td class="num" style="width: 80px;">
+      <span class="badge {% if tier == 'gold' %}pos-tag ATT{% elif tier == 'silver' %}pos-tag MID{% elif tier == 'bronze' %}pos-tag DEF{% else %}pos-tag GK{% endif %}"
+            style="min-width: 36px;">{{ val }}</span>
+    </td>
+    <td style="width: 280px;">
+      <form action="/editor/player/{{ player.uid }}" method="post" class="form-row-flex" style="gap: 6px; align-items: center;">
+        <input type="hidden" name="action" value="edit_player">
+        <input type="hidden" name="uid" value="{{ player.uid }}">
+        <input type="hidden" name="attr" value="{{ key }}">
+        <input type="number" name="value" value="{{ val }}" min="0" max="100" step="1"
+               style="width: 80px; font-family: var(--font-mono); font-weight: 600;">
+        <button type="submit" class="btn small" title="Save {{ label }}">💾</button>
+      </form>
+    </td>
+  </tr>
+{% endmacro %}
+
+{% macro group_card(label, icon, color, items) %}
+  <div class="tactics-group" style="border-color: var(--border);">
+    <div class="group-head" style="background: {{ color }};">
+      {{ icon }} {{ label }}
+      <span class="badge" style="background: rgba(255,255,255,0.2); color: #fff; border-color: rgba(255,255,255,0.3); margin-left: auto;">{{ items|length }}</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 80px;">Code</th>
+          <th>Attribute</th>
+          <th class="num" style="width: 80px;">Current</th>
+          <th style="width: 280px;">New value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, lbl in items %}
+          {{ attr_row(key, lbl) }}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endmacro %}
+
+<div class="row">
+  <div class="col" style="flex: 1;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">🎯</span> Attributes</h2>
+        <span class="pill green">{{ technical|length + mental|length + physical|length + goalkeeping|length + hidden|length }} total</span>
+      </div>
+      <p class="muted small" style="margin-top: 0;">
+        Change a value (0–100), then click 💾 to save that single attribute. Each attribute is saved
+        independently via its own POST form.
+      </p>
+
+      {{ group_card('Technical', '⚙️', '#1d4ed8', technical) }}
+      {{ group_card('Mental', '🧠', '#7c3aed', mental) }}
+      {{ group_card('Physical', '💪', '#ea580c', physical) }}
+      {{ group_card('Goalkeeping', '🧤', '#b45309', goalkeeping) }}
+      {{ group_card('Hidden', '👁', '#475569', hidden) }}
+    </div>
+  </div>
+
+  <div class="col" style="flex: 0 0 280px;">
+    <div class="stack">
+      <div class="card">
+        <div class="section-head">
+          <h2><span class="icon">📊</span> Quick stats</h2>
+        </div>
+        <div class="stat-list">
+          <div class="row-item"><span class="lbl">Technical avg</span><span class="val">
+            {% set t_vals = technical | map('first') | list %}
+            {% set t_sum = namespace(s=0) %}
+            {% for k in t_vals %}{% set t_sum.s = t_sum.s + (attrs[k] or 0) %}{% endfor %}
+            {{ '%.1f' % (t_sum.s / (technical|length)) }}
+          </span></div>
+          <div class="row-item"><span class="lbl">Mental avg</span><span class="val">
+            {% set m_vals = mental | map('first') | list %}
+            {% set m_sum = namespace(s=0) %}
+            {% for k in m_vals %}{% set m_sum.s = m_sum.s + (attrs[k] or 0) %}{% endfor %}
+            {{ '%.1f' % (m_sum.s / (mental|length)) }}
+          </span></div>
+          <div class="row-item"><span class="lbl">Physical avg</span><span class="val">
+            {% set p_vals = physical | map('first') | list %}
+            {% set p_sum = namespace(s=0) %}
+            {% for k in p_vals %}{% set p_sum.s = p_sum.s + (attrs[k] or 0) %}{% endfor %}
+            {{ '%.1f' % (p_sum.s / (physical|length)) }}
+          </span></div>
+          <div class="row-item"><span class="lbl">GK avg</span><span class="val">
+            {% set g_vals = goalkeeping | map('first') | list %}
+            {% set g_sum = namespace(s=0) %}
+            {% for k in g_vals %}{% set g_sum.s = g_sum.s + (attrs[k] or 0) %}{% endfor %}
+            {{ '%.1f' % (g_sum.s / (goalkeeping|length)) }}
+          </span></div>
+          <div class="row-item"><span class="lbl">Hidden avg</span><span class="val">
+            {% set h_vals = hidden | map('first') | list %}
+            {% set h_sum = namespace(s=0) %}
+            {% for k in h_vals %}{% set h_sum.s = h_sum.s + (attrs[k] or 0) %}{% endfor %}
+            {{ '%.1f' % (h_sum.s / (hidden|length)) }}
+          </span></div>
+        </div>
+      </div>
+
+      <div class="card card-accent">
+        <div class="section-head">
+          <h2><span class="icon">🏷</span> Tier legend</h2>
+        </div>
+        <div class="legend" style="flex-direction: column; gap: 8px;">
+          <span class="item"><span class="pos-tag ATT" style="min-width: 36px; text-align: center;">80+</span> World-class</span>
+          <span class="item"><span class="pos-tag MID" style="min-width: 36px; text-align: center;">60+</span> Quality</span>
+          <span class="item"><span class="pos-tag DEF" style="min-width: 36px; text-align: center;">40+</span> Solid</span>
+          <span class="item"><span class="pos-tag GK" style="min-width: 36px; text-align: center;">&lt;40</span> Weak</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head">
+          <h2><span class="icon">🔁</span> Actions</h2>
+        </div>
+        <div class="btn-group" style="flex-direction: column; align-items: stretch;">
+          <a href="/editor" class="btn secondary">🔍 Search again</a>
+          <a href="/club/{{ player.club }}" class="btn secondary" {% if not player.club %}style="opacity: 0.5; pointer-events: none;"{% endif %}>🏟 View club</a>
+          <a href="/" class="btn secondary">🏠 Home</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/editor" class="btn secondary">← Back to editor</a>
+</div>
+
+{% endblock %}

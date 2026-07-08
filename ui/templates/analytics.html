@@ -1,0 +1,528 @@
+{% extends "base.html" %}
+{% block title %}Analytics — {{ match.home_club }} vs {{ match.away_club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/match/{{ match.id }}">Match</a>
+  <span class="sep">/</span>
+  <span>Analytics</span>
+</div>
+
+<div class="scoreboard">
+  <div class="meta-top">
+    📊 Post-Match Analytics
+    <span class="pill dark" style="margin-left: 8px;">{{ events|length }} events analysed</span>
+  </div>
+  <div class="teams">
+    <div class="team">
+      <span class="crest lg">{{ match.home_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.home_club }}">{{ match.home_club }}</a>
+      <span class="formation-badge" style="background: #15803d;">HOME</span>
+    </div>
+    <div class="score-block">
+      <div class="score">{{ match.home_score }}</div>
+      <div class="dash">–</div>
+      <div class="score">{{ match.away_score }}</div>
+    </div>
+    <div class="team">
+      <span class="crest lg">{{ match.away_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.away_club }}">{{ match.away_club }}</a>
+      <span class="formation-badge" style="background: #b91c1c;">AWAY</span>
+    </div>
+  </div>
+  <div class="meta-bottom">
+    Heatmap · xG timeline · Pass network — all computed live from the events feed
+  </div>
+</div>
+
+<div class="card">
+  <div class="kpi-grid">
+    <div class="kpi"><div class="v accent" id="kpi-home-events">—</div><div class="l">{{ match.home_club }} events</div></div>
+    <div class="kpi"><div class="v" style="color: var(--card-r);" id="kpi-away-events">—</div><div class="l">{{ match.away_club }} events</div></div>
+    <div class="kpi"><div class="v" id="kpi-home-xg">—</div><div class="l">Home xG</div></div>
+    <div class="kpi"><div class="v" id="kpi-away-xg">—</div><div class="l">Away xG</div></div>
+    <div class="kpi"><div class="v" id="kpi-passes">—</div><div class="l">Pass pairs</div></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="flex: 1;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">🔥</span> Zone Heatmap</h2>
+        <span class="pill blue">Possession intensity</span>
+      </div>
+      <p class="muted small" style="margin-top: 0;">
+        Pitch divided into zones, coloured by event density —
+        <span style="color: #3b82f6; font-weight: 600;">blue</span> = low activity →
+        <span style="color: #f59e0b; font-weight: 600;">amber</span> = medium →
+        <span style="color: #dc2626; font-weight: 600;">red</span> = high.
+      </p>
+      <div style="display: flex; justify-content: center; padding: 8px 0;">
+        <svg id="heatmap-svg" width="560" height="340" viewBox="0 0 560 340" style="background: #2d7a3e; border-radius: 8px; max-width: 100%;">
+          <rect x="20" y="20" width="520" height="300" fill="none" stroke="white" stroke-width="2"/>
+          <line x1="280" y1="20" x2="280" y2="320" stroke="white" stroke-width="2"/>
+          <circle cx="280" cy="170" r="44" fill="none" stroke="white" stroke-width="2"/>
+          <circle cx="280" cy="170" r="3" fill="white"/>
+          <rect x="20" y="90" width="66" height="160" fill="none" stroke="white" stroke-width="2"/>
+          <rect x="474" y="90" width="66" height="160" fill="none" stroke="white" stroke-width="2"/>
+          <g id="heatmap-zones"></g>
+        </svg>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px;">
+        <span class="muted small">Low</span>
+        <div style="width: 200px; height: 12px; border-radius: 6px; background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 25%, #f59e0b 60%, #dc2626 100%); border: 1px solid var(--border);"></div>
+        <span class="muted small">High</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="col" style="flex: 1;">
+    <div class="card">
+      <div class="section-head">
+        <h2><span class="icon">📈</span> xG Timeline</h2>
+        <span class="pill green">Cumulative xG</span>
+      </div>
+      <p class="muted small" style="margin-top: 0;">
+        Cumulative expected goals over 90 minutes.
+        <span style="color: var(--accent-600); font-weight: 600;">Green</span> = {{ match.home_club }},
+        <span style="color: var(--card-r); font-weight: 600;">red</span> = {{ match.away_club }}.
+      </p>
+      <div style="display: flex; justify-content: center; padding: 8px 0;">
+        <svg id="xg-svg" width="560" height="280" viewBox="0 0 560 280" style="background: var(--bg-soft); border-radius: 8px; max-width: 100%; border: 1px solid var(--border);">
+          <g id="xg-grid"></g>
+          <g id="xg-axes"></g>
+          <path id="xg-home-fill" fill="rgba(22,163,74,0.15)"></path>
+          <path id="xg-away-fill" fill="rgba(220,38,38,0.15)"></path>
+          <polyline id="xg-home-line" fill="none" stroke="#15803d" stroke-width="2.5"></polyline>
+          <polyline id="xg-away-line" fill="none" stroke="#b91c1c" stroke-width="2.5"></polyline>
+          <g id="xg-points"></g>
+          <g id="xg-labels"></g>
+        </svg>
+      </div>
+      <div class="legend" style="justify-content: center;">
+        <span class="item"><span class="swatch" style="background: var(--accent-600);"></span> {{ match.home_club }}</span>
+        <span class="item"><span class="swatch" style="background: var(--card-r);"></span> {{ match.away_club }}</span>
+        <span class="item">0' → 90'</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🕸️</span> Pass Network</h2>
+    <span class="pill amber">Player connections</span>
+  </div>
+  <p class="muted small" style="margin-top: 0;">
+    Nodes are players involved in pass or assist events; edge thickness is proportional to pass count between two players.
+    Home players on the left, away on the right. Node size reflects total involvement.
+  </p>
+  <div style="display: flex; justify-content: center; padding: 8px 0;">
+    <svg id="pass-svg" width="800" height="440" viewBox="0 0 800 440" style="background: #2d7a3e; border-radius: 8px; max-width: 100%;">
+      <rect x="20" y="20" width="760" height="400" fill="none" stroke="white" stroke-width="2"/>
+      <line x1="400" y1="20" x2="400" y2="420" stroke="white" stroke-width="2" stroke-dasharray="4 4"/>
+      <circle cx="400" cy="220" r="50" fill="none" stroke="white" stroke-width="2"/>
+      <circle cx="400" cy="220" r="3" fill="white"/>
+      <rect x="20" y="120" width="80" height="200" fill="none" stroke="white" stroke-width="2"/>
+      <rect x="700" y="120" width="80" height="200" fill="none" stroke="white" stroke-width="2"/>
+      <g id="pass-edges"></g>
+      <g id="pass-nodes"></g>
+    </svg>
+  </div>
+  <div class="legend" style="justify-content: center;">
+    <span class="item"><span class="swatch" style="background: var(--accent-600);"></span> {{ match.home_club }}</span>
+    <span class="item"><span class="swatch" style="background: var(--card-r);"></span> {{ match.away_club }}</span>
+    <span class="item"><span class="swatch" style="background: white;"></span> Node size = involvement</span>
+  </div>
+  <div id="pass-empty" class="empty" style="display: none;">
+    <div class="icon">🕸️</div>
+    <div>No pass or assist events detected in this match's event feed.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🔍</span> Methodology</h2>
+  </div>
+  <ul class="muted small" style="margin: 0; padding-left: 18px; line-height: 1.7;">
+    <li><strong>Heatmap:</strong> The pitch is divided into 8 × 5 = 40 zones. Each event's (x, y) is derived deterministically from its minute, side, and text — home events cluster in the right half, away in the left. Zone colour scales with event count from blue (0) to red (max).</li>
+    <li><strong>xG timeline:</strong> Per-event xG is approximated by type — goal = 0.75, save = 0.35, miss = 0.20, chance = 0.15, free_kick = 0.10, all others = 0. Lines are cumulative totals per side across 90 minutes.</li>
+    <li><strong>Pass network:</strong> Player names are extracted from event text via regex; consecutive names in pass/assist/goal events form edges. Edge thickness scales with the number of connections. Nodes are sized by total involvement and laid out per side.</li>
+  </ul>
+</div>
+
+<div class="btn-group">
+  <a href="/match/{{ match.id }}" class="btn secondary">← Back to match</a>
+  <a href="/match/{{ match.id }}/replay" class="btn secondary">🎥 Watch replay</a>
+</div>
+
+<script>
+(function() {
+  const events = {{ events | tojson }};
+  const HOME = '{{ match.home_club }}';
+  const AWAY = '{{ match.away_club }}';
+
+  // ----- Helpers ----------------------------------------------------------
+  function positionFor(ev, idx) {
+    // Deterministic position; mirrors the replay.html logic so the two
+    // visualisations are consistent.
+    const side = ev.side || (idx % 2 === 0 ? 'home' : 'away');
+    const minute = Math.max(0, Math.min(95, ev.minute || 0));
+    const minuteFrac = Math.min(minute / 90, 1);
+    let xFrac;
+    if (side === 'home') {
+      xFrac = 0.50 + minuteFrac * 0.42;
+    } else {
+      xFrac = 0.08 + (1 - minuteFrac) * 0.42;
+    }
+    const txt = ev.text || '';
+    let hash = 0;
+    for (let i = 0; i < txt.length; i++) {
+      hash = (hash * 31 + txt.charCodeAt(i)) & 0xffffffff;
+    }
+    const yFrac = 0.10 + (Math.abs(hash ^ idx) % 1000) / 1000 * 0.80;
+    return { x: xFrac, y: yFrac, side };
+  }
+
+  function lerpColor(t) {
+    // t in [0,1]; blue → cyan → amber → red
+    const stops = [
+      [0.00, [59, 130, 246]],   // blue
+      [0.25, [6, 182, 212]],    // cyan
+      [0.60, [245, 158, 11]],   // amber
+      [1.00, [220, 38, 38]]     // red
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [t0, c0] = stops[i];
+      const [t1, c1] = stops[i + 1];
+      if (t <= t1) {
+        const u = (t - t0) / (t1 - t0);
+        const r = Math.round(c0[0] + (c1[0] - c0[0]) * u);
+        const g = Math.round(c0[1] + (c1[1] - c0[1]) * u);
+        const b = Math.round(c0[2] + (c1[2] - c0[2]) * u);
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+    return 'rgb(220,38,38)';
+  }
+
+  function el(tag, attrs) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // ===== 1. HEATMAP =======================================================
+  (function renderHeatmap() {
+    const ZONES_X = 8, ZONES_Y = 5;
+    const counts = new Array(ZONES_X * ZONES_Y).fill(0);
+    events.forEach((ev, i) => {
+      const p = positionFor(ev, i);
+      const zx = Math.min(ZONES_X - 1, Math.floor(p.x * ZONES_X));
+      const zy = Math.min(ZONES_Y - 1, Math.floor(p.y * ZONES_Y));
+      counts[zy * ZONES_X + zx]++;
+    });
+    const max = Math.max(1, Math.max(...counts));
+    const zoneG = document.getElementById('heatmap-zones');
+    const pitchX = 20, pitchY = 20, pitchW = 520, pitchH = 300;
+    const zw = pitchW / ZONES_X, zh = pitchH / ZONES_Y;
+    counts.forEach((c, idx) => {
+      const zx = idx % ZONES_X;
+      const zy = Math.floor(idx / ZONES_X);
+      const t = c / max;
+      const color = lerpColor(t);
+      const rect = el('rect', {
+        x: pitchX + zx * zw + 1,
+        y: pitchY + zy * zh + 1,
+        width: zw - 2,
+        height: zh - 2,
+        fill: color,
+        opacity: c === 0 ? 0.10 : 0.55 + t * 0.35,
+        rx: 3
+      });
+      const title = el('title', {});
+      title.textContent = `Zone (${zx+1},${zy+1}) — ${c} event${c === 1 ? '' : 's'}`;
+      rect.appendChild(title);
+      zoneG.appendChild(rect);
+      if (c > 0) {
+        const txt = el('text', {
+          x: pitchX + zx * zw + zw / 2,
+          y: pitchY + zy * zh + zh / 2 + 4,
+          'text-anchor': 'middle',
+          fill: t > 0.5 ? '#fff' : '#0f172a',
+          'font-size': '11',
+          'font-weight': '700',
+          'font-family': 'monospace'
+        });
+        txt.textContent = c;
+        zoneG.appendChild(txt);
+      }
+    });
+  })();
+
+  // ===== 2. xG TIMELINE ===================================================
+  (function renderXG() {
+    const xgByType = {
+      goal: 0.75, save: 0.35, miss: 0.20, chance: 0.15, free_kick: 0.10,
+      penalty: 0.50, offside: 0, foul: 0, card: 0, sub: 0, injury: 0,
+      info: 0, kickoff: 0, halftime: 0, fulltime: 0
+    };
+    const homeSeries = [{ minute: 0, xg: 0 }];
+    const awaySeries = [{ minute: 0, xg: 0 }];
+    let hTot = 0, aTot = 0;
+    events.forEach((ev, i) => {
+      const xg = xgByType[ev.type] || 0;
+      if (ev.side === 'home') hTot += xg;
+      else if (ev.side === 'away') aTot += xg;
+      homeSeries.push({ minute: ev.minute || 0, xg: hTot });
+      awaySeries.push({ minute: ev.minute || 0, xg: aTot });
+    });
+    homeSeries.push({ minute: 90, xg: hTot });
+    awaySeries.push({ minute: 90, xg: aTot });
+
+    document.getElementById('kpi-home-xg').textContent = hTot.toFixed(2);
+    document.getElementById('kpi-away-xg').textContent = aTot.toFixed(2);
+
+    const maxX = 90;
+    const maxY = Math.max(hTot, aTot, 0.5);
+    const PAD_L = 40, PAD_R = 14, PAD_T = 14, PAD_B = 28;
+    const W = 560, H = 280;
+    const plotW = W - PAD_L - PAD_R;
+    const plotH = H - PAD_T - PAD_B;
+
+    function sx(m) { return PAD_L + (m / maxX) * plotW; }
+    function sy(v) { return PAD_T + plotH - (v / maxY) * plotH; }
+
+    // Grid
+    const gridG = document.getElementById('xg-grid');
+    for (let m = 0; m <= 90; m += 15) {
+      const x = sx(m);
+      const line = el('line', { x1: x, y1: PAD_T, x2: x, y2: PAD_T + plotH, stroke: '#e2e8f0', 'stroke-width': 1, 'stroke-dasharray': m === 0 || m === 90 ? '0' : '3 3' });
+      gridG.appendChild(line);
+      const txt = el('text', { x: x, y: H - 8, 'text-anchor': 'middle', fill: '#64748b', 'font-size': 11, 'font-family': 'monospace' });
+      txt.textContent = m + "'";
+      gridG.appendChild(txt);
+    }
+    const yStops = Math.min(5, Math.ceil(maxY * 2));
+    for (let i = 0; i <= yStops; i++) {
+      const v = (maxY / yStops) * i;
+      const y = sy(v);
+      const line = el('line', { x1: PAD_L, y1: y, x2: W - PAD_R, y2: y, stroke: '#e2e8f0', 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+      gridG.appendChild(line);
+      const txt = el('text', { x: PAD_L - 6, y: y + 4, 'text-anchor': 'end', fill: '#64748b', 'font-size': 11, 'font-family': 'monospace' });
+      txt.textContent = v.toFixed(1);
+      gridG.appendChild(txt);
+    }
+    // Axes
+    const axesG = document.getElementById('xg-axes');
+    axesG.appendChild(el('line', { x1: PAD_L, y1: PAD_T, x2: PAD_L, y2: PAD_T + plotH, stroke: '#cbd5e1', 'stroke-width': 1.5 }));
+    axesG.appendChild(el('line', { x1: PAD_L, y1: PAD_T + plotH, x2: W - PAD_R, y2: PAD_T + plotH, stroke: '#cbd5e1', 'stroke-width': 1.5 }));
+
+    function buildPath(series, close) {
+      let d = '';
+      series.forEach((pt, i) => {
+        d += (i === 0 ? 'M ' : 'L ') + sx(pt.minute).toFixed(1) + ' ' + sy(pt.xg).toFixed(1) + ' ';
+      });
+      if (close) {
+        d += `L ${sx(series[series.length-1].minute).toFixed(1)} ${sy(0).toFixed(1)} L ${sx(0).toFixed(1)} ${sy(0).toFixed(1)} Z`;
+      }
+      return d;
+    }
+    function buildPoints(series) {
+      return series.map(pt => `${sx(pt.minute).toFixed(1)},${sy(pt.xg).toFixed(1)}`).join(' ');
+    }
+
+    document.getElementById('xg-home-line').setAttribute('points', buildPoints(homeSeries));
+    document.getElementById('xg-away-line').setAttribute('points', buildPoints(awaySeries));
+    document.getElementById('xg-home-fill').setAttribute('d', buildPath(homeSeries, true));
+    document.getElementById('xg-away-fill').setAttribute('d', buildPath(awaySeries, true));
+
+    // Mark goal events with dots
+    const pointsG = document.getElementById('xg-points');
+    events.forEach(ev => {
+      if (ev.type !== 'goal') return;
+      const cum = ev.side === 'home' ? homeSeries : awaySeries;
+      const idx = events.indexOf(ev) + 1;
+      const pt = cum[idx] || cum[cum.length - 1];
+      const dot = el('circle', {
+        cx: sx(pt.minute), cy: sy(pt.xg), r: 5,
+        fill: ev.side === 'home' ? '#15803d' : '#b91c1c',
+        stroke: '#fff', 'stroke-width': 2
+      });
+      const t = el('title', {});
+      t.textContent = `${ev.minute}' ⚽ ${ev.text}`;
+      dot.appendChild(t);
+      pointsG.appendChild(dot);
+    });
+
+    // Labels
+    const labelsG = document.getElementById('xg-labels');
+    const hLbl = el('text', {
+      x: sx(90) - 6, y: sy(hTot) - 8, 'text-anchor': 'end',
+      fill: '#15803d', 'font-size': 12, 'font-weight': 700, 'font-family': 'monospace'
+    });
+    hLbl.textContent = `${HOME} ${hTot.toFixed(2)}`;
+    labelsG.appendChild(hLbl);
+    const aLbl = el('text', {
+      x: sx(90) - 6, y: sy(aTot) + 14, 'text-anchor': 'end',
+      fill: '#b91c1c', 'font-size': 12, 'font-weight': 700, 'font-family': 'monospace'
+    });
+    aLbl.textContent = `${AWAY} ${aTot.toFixed(2)}`;
+    labelsG.appendChild(aLbl);
+  })();
+
+  // ===== 3. PASS NETWORK ==================================================
+  (function renderPassNetwork() {
+    // Extract player names from event text. Match 1-3 capitalised words.
+    const STOP = new Set(['Goal','Save','Miss','Yellow','Red','Card','Sub','Substitution','Offside',
+      'Foul','Free','Kick','Penalty','Injury','Chance','The','And','To','From','For','By','As','In',
+      'On','Of','At','Halftime','Full','Time','Kickoff','Half','Match','Minute','Score','Scores',
+      'Scored','Scoring','With','Assist','Assists','Assisted','Pass','Passes','Passed','Through',
+      'Tackle','Tackled','Cross','Crossed','Shot','Header','Headers','Corner','Corners','Throw',
+      'Block','Blocked','Interception','Intercepted','Clearance','Cleared','Wide','Over','Bar','Post',
+      'Out','Back','Forward','Left','Right','Centre','Center','Middle','Up','Down','Pitch','Field',
+      'Referee','VAR','Decision','Penalty','Awarded','Conceded','Booking','Sent','Off','Home','Away']);
+    const nameRegex = /\b[A-ZÀ-Ý][a-zà-ÿ]+(?:[-'][A-ZÀ-Ýa-zà-ÿ]+)?(?:\s+[A-ZÀ-Ý][a-zà-ÿ]+(?:[-'][A-ZÀ-Ýa-zà-ÿ]+)?){0,2}\b/g;
+
+    function extractNames(text) {
+      const matches = (text || '').match(nameRegex) || [];
+      return matches.filter(n => !STOP.has(n) && n.length > 2);
+    }
+
+    const passTypes = new Set(['pass', 'assist', 'goal', 'chance', 'free_kick', 'save', 'miss']);
+    const passEvents = events.filter(ev => passTypes.has(ev.type) || /\bpass|\bassist|→|scores|cross|through/i.test(ev.text || ''));
+
+    const players = new Map();  // key: "side|name" -> { name, side, count }
+    const edges = new Map();    // key: "a|b" -> count (a < b lexicographically within side)
+
+    function playerKey(side, name) { return (side || 'home') + '|' + name; }
+
+    function registerPlayer(side, name) {
+      const key = playerKey(side, name);
+      if (!players.has(key)) {
+        players.set(key, { name, side: side || 'home', count: 0 });
+      }
+      players.get(key).count++;
+    }
+
+    function registerEdge(side, a, b) {
+      if (a === b) return;
+      const s = side || 'home';
+      const [n1, n2] = a < b ? [a, b] : [b, a];
+      const key = `${s}|${n1}|${n2}`;
+      edges.set(key, (edges.get(key) || 0) + 1);
+    }
+
+    passEvents.forEach(ev => {
+      const names = extractNames(ev.text);
+      if (names.length === 0) return;
+      const side = ev.side || 'home';
+      names.forEach(n => registerPlayer(side, n));
+      // Within an event, consecutive names form an edge (passer → receiver / scorer → assister)
+      for (let i = 0; i < names.length - 1; i++) {
+        registerEdge(side, names[i], names[i + 1]);
+      }
+    });
+
+    // Also chain across consecutive same-side pass events (possession strings)
+    let prevName = null, prevSide = null;
+    events.forEach(ev => {
+      if (!passTypes.has(ev.type)) { prevName = null; return; }
+      const names = extractNames(ev.text);
+      if (names.length === 0) { prevName = null; return; }
+      const side = ev.side || 'home';
+      if (prevName !== null && side === prevSide && prevName !== names[0]) {
+        registerEdge(side, prevName, names[0]);
+      }
+      prevName = names[names.length - 1];
+      prevSide = side;
+    });
+
+    document.getElementById('kpi-passes').textContent = edges.size;
+    document.getElementById('kpi-home-events').textContent = events.filter(e => e.side === 'home').length;
+    document.getElementById('kpi-away-events').textContent = events.filter(e => e.side === 'away').length;
+
+    if (players.size === 0) {
+      document.getElementById('pass-empty').style.display = '';
+      return;
+    }
+
+    // Layout: split into home/away, arrange in a vertical ellipse per side
+    const W = 800, H = 440;
+    const homePlayers = [...players.values()].filter(p => p.side === 'home');
+    const awayPlayers = [...players.values()].filter(p => p.side === 'away');
+    const maxCount = Math.max(1, ...[...players.values()].map(p => p.count));
+
+    function layoutSide(arr, xCenter, direction) {
+      const n = arr.length;
+      arr.forEach((p, i) => {
+        const t = n === 1 ? 0.5 : i / (n - 1);
+        // Vertical ellipse layout: top to bottom
+        p.x = xCenter + Math.sin(t * Math.PI * 2 + i) * 30 * direction;
+        p.y = 60 + t * (H - 120);
+        // Slight horizontal spread for visual interest
+        p.x = xCenter + (i % 2 === 0 ? -1 : 1) * (15 + (i % 3) * 12) * direction;
+      });
+    }
+    layoutSide(homePlayers, 200, 1);
+    layoutSide(awayPlayers, 600, -1);
+
+    // Draw edges first
+    const edgesG = document.getElementById('pass-edges');
+    let maxEdge = 1;
+    edges.forEach(v => { if (v > maxEdge) maxEdge = v; });
+    edges.forEach((count, key) => {
+      const [side, n1, n2] = key.split('|');
+      const k1 = playerKey(side, n1);
+      const k2 = playerKey(side, n2);
+      const p1 = players.get(k1);
+      const p2 = players.get(k2);
+      if (!p1 || !p2) return;
+      const thickness = 1 + (count / maxEdge) * 5;
+      const line = el('line', {
+        x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
+        stroke: side === 'home' ? 'rgba(22,163,74,0.65)' : 'rgba(220,38,38,0.65)',
+        'stroke-width': thickness,
+        'stroke-linecap': 'round'
+      });
+      const title = el('title', {});
+      title.textContent = `${n1} ↔ ${n2}: ${count} pass${count === 1 ? '' : 'es'}`;
+      line.appendChild(title);
+      edgesG.appendChild(line);
+    });
+
+    // Draw nodes
+    const nodesG = document.getElementById('pass-nodes');
+    players.forEach(p => {
+      const r = 8 + (p.count / maxCount) * 14;
+      const circle = el('circle', {
+        cx: p.x, cy: p.y, r: r,
+        fill: p.side === 'home' ? '#15803d' : '#b91c1c',
+        stroke: '#fff', 'stroke-width': 2
+      });
+      const title = el('title', {});
+      title.textContent = `${p.name} — ${p.count} involvement${p.count === 1 ? '' : 's'}`;
+      circle.appendChild(title);
+      nodesG.appendChild(circle);
+      const lbl = el('text', {
+        x: p.x, y: p.y + r + 12, 'text-anchor': 'middle',
+        fill: '#fff', 'font-size': 10, 'font-weight': 600,
+        'font-family': 'sans-serif'
+      });
+      // Short label: first + last initial
+      const parts = p.name.split(' ');
+      const short = parts.length > 1
+        ? parts[0] + ' ' + parts[parts.length - 1][0] + '.'
+        : parts[0];
+      lbl.textContent = short;
+      nodesG.appendChild(lbl);
+    });
+  })();
+
+})();
+</script>
+
+{% endblock %}

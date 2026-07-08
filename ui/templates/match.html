@@ -35,6 +35,11 @@
   <div class="meta-bottom">
     {% if home_formation or away_formation %}{{ home_formation or '?' }} vs {{ away_formation or '?' }} · {% endif %}Full time
   </div>
+  {% if match.xg_home is defined or match.xg_away is defined %}
+  <div class="meta-bottom" style="font-size: 14px; margin-top: 4px;">
+    <strong>xG:</strong> {{ '%.2f' % match.xg_home if match.xg_home else '0.00' }} — {{ '%.2f' % match.xg_away if match.xg_away else '0.00' }}
+  </div>
+  {% endif %}
 </div>
 
 <!-- 2D Pitch Visualization (Phase 3D) -->

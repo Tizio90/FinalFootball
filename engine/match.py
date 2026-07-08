@@ -71,6 +71,8 @@ class MatchStats:
     passes_completed: dict[str, int] = field(default_factory=lambda: {"home": 0, "away": 0})
     cards: dict[str, dict[str, int]] = field(
         default_factory=lambda: {"home": {"y": 0, "r": 0}, "away": {"y": 0, "r": 0}})
+    # Phase 4A: xG tracking
+    xg: dict[str, float] = field(default_factory=lambda: {"home": 0.0, "away": 0.0})
 
 
 @dataclass
@@ -147,7 +149,11 @@ class MatchEngine:
                  seed: Optional[int] = None,
                  home_advantage: float = 1.10,
                  home_mentality: str = "balanced",
-                 away_mentality: str = "balanced"):
+                 away_mentality: str = "balanced",
+                 home_instructions: dict | None = None,
+                 away_instructions: dict | None = None,
+                 home_profile: str = "possession",
+                 away_profile: str = "possession"):
         self.home_club = home_club
         self.away_club = away_club
         # Deep-copy XI and bench so simulations never mutate the caller's
@@ -160,6 +166,11 @@ class MatchEngine:
         self.home_advantage = home_advantage
         self.home_mentality = home_mentality
         self.away_mentality = away_mentality
+        # Phase 4A: team instructions + manager profiles
+        self.home_instructions = home_instructions or {}
+        self.away_instructions = away_instructions or {}
+        self.home_profile = home_profile
+        self.away_profile = away_profile
         self.rng = random.Random(seed)
 
         self.form_roll: dict[int, float] = {}
@@ -295,17 +306,61 @@ class MatchEngine:
         h_pos, a_pos = self._possession_split(home_str, away_str)
         self.stats.possession = {"home": round(h_pos, 3), "away": round(a_pos, 3)}
 
+        # Phase 4A: compute zone strengths for both teams
+        from engine.zones import get_formation_zone_strength, compute_transition_probabilities, get_xg_for_shot, ATT_THIRD
+        home_zone_str = get_formation_zone_strength(self.home_xi, {})
+        away_zone_str = get_formation_zone_strength(self.away_xi, {})
+
         sides: list[str] = []
         for _ in range(PHASES_PER_MATCH):
             sides.append("home" if self.rng.random() < h_pos else "away")
 
+        # Phase 4A: track current zone for each side (start in defensive third)
+        home_zone = (0, 1)  # defensive center
+        away_zone = (0, 1)
+
+        # Phase 4A: track yellow-carded players for AI caution
+        home_yellows: set[int] = set()
+        away_yellows: set[int] = set()
+
         for i, side in enumerate(sides):
             minute = self._phase_to_minute(i, PHASES_PER_MATCH)
             self._tick_fatigue()
+
+            # Phase 4A: AI tactical adaptation every ~10 minutes
+            if minute > 0 and minute % 10 == 0:
+                self._adapt_tactics(minute, home_yellows, away_yellows)
+
             if minute in (60, 70, 75):
                 self._maybe_substitute(minute)
             self._maybe_injury(side, minute)
-            self._simulate_phase(side, minute)
+
+            # Phase 4A: zone-based phase simulation
+            if side == "home":
+                current_zone = home_zone
+                att_str = home_zone_str
+                def_str = away_zone_str
+                instructions = self.home_instructions
+            else:
+                current_zone = away_zone
+                att_str = away_zone_str
+                def_str = home_zone_str
+                instructions = self.away_instructions
+
+            # compute zone transition
+            probs = compute_transition_probabilities(current_zone, att_str, def_str, instructions)
+            zones = list(probs.keys())
+            weights = list(probs.values())
+            new_zone = self.rng.choices(zones, weights=weights, k=1)[0]
+
+            # update zone for this side
+            if side == "home":
+                home_zone = new_zone
+            else:
+                away_zone = new_zone
+
+            # simulate the phase with zone context
+            self._simulate_phase(side, minute, new_zone)
 
         self._emit(90, "info", "neutral",
                    f"Full time: {self.home_club} {self.home_score} - "
@@ -343,9 +398,38 @@ class MatchEngine:
             self.fatigue[uid] = self.fatigue.get(uid, 0.0) + 1.0
 
     # ------------------------------------------------------------------
+    # Phase 4A: AI tactical adaptation
+    # ------------------------------------------------------------------
+    def _adapt_tactics(self, minute: int, home_yellows: set, away_yellows: set) -> None:
+        """Evaluate AI tactical adaptation for both sides every ~10 minutes."""
+        from engine.tactics_ai import adapt_tactics
+
+        # Home side adaptation (if not user-controlled — user controls via UI)
+        # For now, both sides adapt (simplified — no user/AI distinction in engine)
+        home_result = adapt_tactics(
+            self.home_mentality, self.home_score, self.away_score,
+            minute, self.home_profile, home_yellows,
+        )
+        if home_result["new_mentality"] and home_result["new_mentality"] != self.home_mentality:
+            self.home_mentality = home_result["new_mentality"]
+            if home_result["event_text"]:
+                self._emit(minute, "info", "home", home_result["event_text"])
+
+        # Away side adaptation
+        away_result = adapt_tactics(
+            self.away_mentality, self.away_score, self.home_score,
+            minute, self.away_profile, away_yellows,
+        )
+        if away_result["new_mentality"] and away_result["new_mentality"] != self.away_mentality:
+            self.away_mentality = away_result["new_mentality"]
+            if away_result["event_text"]:
+                self._emit(minute, "info", "away", away_result["event_text"])
+
+    # ------------------------------------------------------------------
     # Phase chains
     # ------------------------------------------------------------------
-    def _simulate_phase(self, attacker: str, minute: int) -> None:
+    def _simulate_phase(self, attacker: str, minute: int,
+                        zone: tuple[int, int] = (1, 1)) -> None:
         att_xi = self.home_xi if attacker == "home" else self.away_xi
         def_xi = self.away_xi if attacker == "home" else self.home_xi
         def_side = "away" if attacker == "home" else "home"
@@ -449,23 +533,21 @@ class MatchEngine:
             return
 
         self._attempt_shot(attacker_p, marker, def_xi, minute, attacker,
-                           assist_candidate=passer)
+                           assist_candidate=passer, zone=zone)
 
     def _attempt_shot(self, shooter: dict[str, Any],
                       nearest_def: dict[str, Any],
                       def_xi: list[dict[str, Any]],
                       minute: int, attacker: str,
                       assist_candidate: dict[str, Any] | None = None,
-                      allow_corner: bool = True) -> None:
-        """§0.2: assist_candidate threaded through for goal attribution."""
+                      allow_corner: bool = True,
+                      zone: tuple[int, int] = (1, 1)) -> None:
+        """§0.2: assist_candidate threaded through for goal attribution.
+        Phase 4A: zone parameter affects shot quality + xG tracking."""
         # mentality affects defensive line height of the DEFENDING team.
-        # A defensive mentality (low line, 0.7) packs defenders in the box →
-        # MORE pressure on the shooter. An attacking mentality (high line, 1.3)
-        # gives the attacker more space → LESS pressure.
-        # So pressure multiplier = 2.0 - line_height (inverted).
         defending_mentality = self.away_mentality if attacker == "home" else self.home_mentality
         line_height = MENTALITY_LINE_HEIGHT[defending_mentality]
-        pressure_mult = 2.0 - line_height  # defensive 0.7 → 1.3, attacking 1.3 → 0.7
+        pressure_mult = 2.0 - line_height
         pressure = (
             self._eff(nearest_def, "Tck") * 0.4 +
             self._eff(nearest_def, "Pos") * 0.3 +
@@ -482,9 +564,18 @@ class MatchEngine:
         )
         shot_quality -= pressure * 0.30
 
+        # Phase 4A: zone bonus to shot quality
+        from engine.zones import get_shot_zone_bonus, get_xg_for_shot
+        zone_bonus = get_shot_zone_bonus(zone)
+        shot_quality *= zone_bonus
+
         shot_roll = shot_quality + self.rng.gauss(0, 12.5)
         self.stats.shots[attacker] += 1
         self.player_actions[shooter["uid"]]["shots"] += 1
+
+        # Phase 4A: compute + accumulate xG for this shot
+        xg = get_xg_for_shot(zone, shot_quality, pressure)
+        self.stats.xg[attacker] += xg
 
         mentality = self.home_mentality if attacker == "home" else self.away_mentality
         on_target_threshold = 42.5 + MENTALITY_SHOT_THRESHOLD_MOD[mentality]
@@ -959,7 +1050,11 @@ def play_match(home_club: str, away_club: str,
                seed: int | None = None,
                home_mentality: str = "balanced",
                away_mentality: str = "balanced",
-               home_advantage: float = 1.10) -> MatchResult:
+               home_advantage: float = 1.10,
+               home_instructions: dict | None = None,
+               away_instructions: dict | None = None,
+               home_profile: str = "possession",
+               away_profile: str = "possession") -> MatchResult:
     engine = MatchEngine(
         home_club=home_club, away_club=away_club,
         home_xi=home_xi, away_xi=away_xi,
@@ -967,5 +1062,7 @@ def play_match(home_club: str, away_club: str,
         seed=seed,
         home_mentality=home_mentality, away_mentality=away_mentality,
         home_advantage=home_advantage,
+        home_instructions=home_instructions, away_instructions=away_instructions,
+        home_profile=home_profile, away_profile=away_profile,
     )
     return engine.simulate()

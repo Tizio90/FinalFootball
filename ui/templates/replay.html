@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}Replay — {{ match.home_club }} vs {{ match.away_club }}{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/match/{{ match.id }}">Match</a>
+  <span class="sep">/</span>
+  <span>Replay</span>
+</div>
+
+<div class="scoreboard">
+  <div class="meta-top">
+    🎥 Match Replay
+    <span class="pill dark" style="margin-left: 8px;">{{ events|length }} events</span>
+  </div>
+  <div class="teams">
+    <div class="team">
+      <span class="crest lg">{{ match.home_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.home_club }}">{{ match.home_club }}</a>
+      <span class="formation-badge" style="background: #15803d;">HOME</span>
+    </div>
+    <div class="score-block">
+      <div class="score" id="home-score">{{ match.home_score }}</div>
+      <div class="dash">–</div>
+      <div class="score" id="away-score">{{ match.away_score }}</div>
+    </div>
+    <div class="team">
+      <span class="crest lg">{{ match.away_club[:2]|upper }}</span>
+      <a class="name" href="/club/{{ match.away_club }}">{{ match.away_club }}</a>
+      <span class="formation-badge" style="background: #b91c1c;">AWAY</span>
+    </div>
+  </div>
+  <div class="meta-bottom" id="replay-status">
+    ⏸ Paused · Press play to start the replay
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">🗺️</span> Pitch Replay</h2>
+    <span class="muted small" id="event-counter">0 / {{ events|length }} events</span>
+  </div>
+
+  <div style="display: flex; justify-content: center; padding: 12px 0 8px;">
+    <svg id="pitch-svg" width="560" height="340" viewBox="0 0 560 340" style="background: #2d7a3e; border-radius: 8px; max-width: 100%;">
+      <!-- Pitch markings (same as match.html, scaled to 560x340) -->
+      <rect x="20" y="20" width="520" height="300" fill="none" stroke="white" stroke-width="2"/>
+      <line x1="280" y1="20" x2="280" y2="320" stroke="white" stroke-width="2"/>
+      <circle cx="280" cy="170" r="44" fill="none" stroke="white" stroke-width="2"/>
+      <circle cx="280" cy="170" r="3" fill="white"/>
+      <!-- Penalty areas -->
+      <rect x="20" y="90" width="66" height="160" fill="none" stroke="white" stroke-width="2"/>
+      <rect x="474" y="90" width="66" height="160" fill="none" stroke="white" stroke-width="2"/>
+      <!-- 6-yard boxes -->
+      <rect x="20" y="130" width="28" height="80" fill="none" stroke="white" stroke-width="2"/>
+      <rect x="512" y="130" width="28" height="80" fill="none" stroke="white" stroke-width="2"/>
+      <!-- Goals -->
+      <rect x="14" y="150" width="6" height="40" fill="white"/>
+      <rect x="540" y="150" width="6" height="40" fill="white"/>
+      <!-- Penalty spots -->
+      <circle cx="74" cy="170" r="2" fill="white"/>
+      <circle cx="486" cy="170" r="2" fill="white"/>
+      <!-- Event dots added here by JS -->
+      <g id="event-dots"></g>
+      <g id="event-current"></g>
+    </svg>
+  </div>
+
+  <div style="display: flex; gap: 12px; justify-content: center; margin-top: 8px;">
+    <span class="pill" style="background: #15803d; color: white;">● {{ match.home_club }}</span>
+    <span class="pill" style="background: #b91c1c; color: white;">● {{ match.away_club }}</span>
+    <span class="pill" style="background: #fbbf24; color: #1f2937;">★ Current event</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="btn-group" style="justify-content: center; margin-top: 6px;">
+    <button id="btn-prev" class="btn secondary" title="Previous event">⏮ Prev</button>
+    <button id="btn-play" class="btn large" title="Play / Pause">▶ Play</button>
+    <button id="btn-next" class="btn secondary" title="Next event">Next ⏭</button>
+    <button id="btn-reset" class="btn secondary" title="Reset to start">🔄 Reset</button>
+  </div>
+
+  <div class="btn-group" style="justify-content: center; margin-top: 10px;">
+    <span class="muted small" style="align-self: center;">Speed:</span>
+    <button id="speed-1x" class="btn small">1×</button>
+    <button id="speed-2x" class="btn small secondary">2×</button>
+    <button id="speed-4x" class="btn small secondary">4×</button>
+  </div>
+
+  <div style="margin-top: 14px;">
+    <div style="height: 6px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--r-pill); overflow: hidden;">
+      <div id="progress-bar" style="height: 100%; width: 0%; background: var(--accent); transition: width .15s ease;"></div>
+    </div>
+    <div class="muted small center" style="margin-top: 6px;" id="minute-display">0'</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2><span class="icon">📡</span> Event Timeline</h2>
+    <span class="muted small">Click any event to jump to it</span>
+  </div>
+  <div class="feed" id="feed" style="max-height: 480px;">
+    {% for ev in events %}
+    <div class="event {{ ev.type }}" data-index="{{ loop.index0 }}">
+      <span class="minute">{{ ev.minute }}'</span>
+      <span class="icon">
+        {% if ev.type == 'goal' %}⚽
+        {% elif ev.type == 'miss' %}❌
+        {% elif ev.type == 'save' %}🧤
+        {% elif ev.type == 'card' %}🟨
+        {% elif ev.type == 'sub' %}🔁
+        {% elif ev.type == 'injury' %}🩹
+        {% elif ev.type == 'foul' %}🦶
+        {% elif ev.type == 'offside' %}🚩
+        {% elif ev.type == 'free_kick' %}🎯
+        {% elif ev.type == 'chance' %}⚡
+        {% elif ev.type == 'info' %}ℹ
+        {% else %}•{% endif %}
+      </span>
+      <span class="text">{{ ev.text }}</span>
+      {% if ev.side %}
+      <span class="badge" style="margin-left: auto; flex-shrink: 0;">
+        {% if ev.side == 'home' %}{{ match.home_club[:2]|upper }}{% else %}{{ match.away_club[:2]|upper }}{% endif %}
+      </span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card card-accent">
+  <div class="section-head">
+    <h2><span class="icon">📈</span> Live event</h2>
+  </div>
+  <div id="current-event-display" style="text-align: center; padding: 16px;">
+    <div class="muted small">No event selected</div>
+    <div style="font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px;">Press ▶ Play to begin the replay</div>
+  </div>
+</div>
+
+<div class="btn-group">
+  <a href="/match/{{ match.id }}" class="btn secondary">← Back to match</a>
+  <a href="/match/{{ match.id }}/analytics" class="btn secondary">📊 View analytics</a>
+</div>
+
+<script>
+(function() {
+  const events = {{ events | tojson }};
+  const matchId = {{ match.id }};
+
+  const pitchG = document.getElementById('event-dots');
+  const currentG = document.getElementById('event-current');
+  const playBtn = document.getElementById('btn-play');
+  const prevBtn = document.getElementById('btn-prev');
+  const nextBtn = document.getElementById('btn-next');
+  const resetBtn = document.getElementById('btn-reset');
+  const speed1x = document.getElementById('speed-1x');
+  const speed2x = document.getElementById('speed-2x');
+  const speed4x = document.getElementById('speed-4x');
+  const counter = document.getElementById('event-counter');
+  const minuteDisplay = document.getElementById('minute-display');
+  const progressBar = document.getElementById('progress-bar');
+  const replayStatus = document.getElementById('replay-status');
+  const currentDisplay = document.getElementById('current-event-display');
+  const feedItems = document.querySelectorAll('#feed .event');
+
+  // Pitch geometry (matches the SVG above)
+  const PITCH = { x0: 20, y0: 20, w: 520, h: 300 };
+
+  let currentIdx = -1;
+  let playing = false;
+  let timer = null;
+  let speed = 1;  // events per second multiplier
+  const BASE_INTERVAL_MS = 900;  // ms per event at 1x
+
+  // Deterministic pseudo-position for each event.
+  // Home events bias to the left half; away to the right half.
+  // X derived from minute (later = deeper into opposition half).
+  // Y derived from a hash of the text + index.
+  function positionFor(ev, idx) {
+    const side = ev.side || (idx % 2 === 0 ? 'home' : 'away');
+    const minute = ev.minute || 0;
+    // X: scale 0..110 minutes to a position in the opposition half.
+    // Home team attacks right (high X); away attacks left (low X).
+    const minuteFrac = Math.min(minute / 90, 1);
+    let xFrac;
+    if (side === 'home') {
+      xFrac = 0.50 + minuteFrac * 0.42;  // 0.50..0.92 (right half)
+    } else {
+      xFrac = 0.08 + (1 - minuteFrac) * 0.42;  // 0.08..0.50 (left half)
+    }
+    // Y: deterministic pseudo-random based on text hash
+    const txt = ev.text || '';
+    let hash = 0;
+    for (let i = 0; i < txt.length; i++) {
+      hash = (hash * 31 + txt.charCodeAt(i)) & 0xffffffff;
+    }
+    const yFrac = 0.10 + (Math.abs(hash ^ idx) % 1000) / 1000 * 0.80;
+    return {
+      x: PITCH.x0 + xFrac * PITCH.w,
+      y: PITCH.y0 + yFrac * PITCH.h
+    };
+  }
+
+  function colorFor(side) {
+    return side === 'home' ? '#15803d' : '#b91c1c';
+  }
+
+  function typeEmoji(type) {
+    const map = {
+      goal: '⚽', miss: '❌', save: '🧤', card: '🟨', sub: '🔁',
+      injury: '🩹', foul: '🦶', offside: '🚩', free_kick: '🎯',
+      chance: '⚡', info: 'ℹ', kickoff: '🏴', halftime: '⏸', fulltime: '🏁'
+    };
+    return map[type] || '•';
+  }
+
+  function clearGroup(g) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+  }
+
+  function addDot(ev, idx, isCurrent) {
+    const pos = positionFor(ev, idx);
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', pos.x);
+    dot.setAttribute('cy', pos.y);
+    const isGoal = ev.type === 'goal';
+    dot.setAttribute('r', isGoal ? 9 : 6);
+    dot.setAttribute('fill', colorFor(ev.side));
+    dot.setAttribute('stroke', isCurrent ? '#fbbf24' : (isGoal ? '#fbbf24' : 'white'));
+    dot.setAttribute('stroke-width', isCurrent ? 3 : 1.5);
+    dot.setAttribute('opacity', isCurrent ? 1.0 : 0.55);
+    if (isCurrent) {
+      // pulsing ring
+      const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      ring.setAttribute('cx', pos.x);
+      ring.setAttribute('cy', pos.y);
+      ring.setAttribute('r', 14);
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', '#fbbf24');
+      ring.setAttribute('stroke-width', 2);
+      ring.setAttribute('opacity', 0.7);
+      currentG.appendChild(ring);
+    }
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = `${ev.minute}' ${ev.type}: ${ev.text}`;
+    dot.appendChild(title);
+    pitchG.appendChild(dot);
+  }
+
+  function render() {
+    clearGroup(pitchG);
+    clearGroup(currentG);
+    // Show all events up to and including currentIdx
+    for (let i = 0; i <= currentIdx && i < events.length; i++) {
+      addDot(events[i], i, i === currentIdx);
+    }
+    updateUI();
+  }
+
+  function updateUI() {
+    const total = events.length;
+    counter.textContent = `${currentIdx + 1} / ${total} events`;
+    const pct = total > 0 ? ((currentIdx + 1) / total) * 100 : 0;
+    progressBar.style.width = pct + '%';
+
+    const ev = currentIdx >= 0 && currentIdx < total ? events[currentIdx] : null;
+    if (ev) {
+      minuteDisplay.textContent = `${ev.minute}' · ${ev.type}`;
+      replayStatus.textContent = `${playing ? '▶ Playing' : '⏸ Paused'} · Event ${currentIdx + 1}/${total} · ${ev.minute}'`;
+      currentDisplay.innerHTML = `
+        <div class="muted small">${typeEmoji(ev.type)} ${ev.type.toUpperCase()} · ${ev.minute}'</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px;">${ev.text}</div>
+        <div style="margin-top: 8px;"><span class="pill ${ev.side === 'home' ? 'green' : 'red'}">${ev.side === 'home' ? '{{ match.home_club }}' : '{{ match.away_club }}'}</span></div>
+      `;
+    } else {
+      minuteDisplay.textContent = "0'";
+      replayStatus.textContent = `${playing ? '▶ Playing' : '⏸ Paused'} · Press play to start`;
+      currentDisplay.innerHTML = `
+        <div class="muted small">No event selected</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--primary); margin-top: 8px;">Press ▶ Play to begin the replay</div>
+      `;
+    }
+
+    // Highlight feed item
+    feedItems.forEach((el, i) => {
+      if (i === currentIdx) {
+        el.style.outline = '2px solid var(--accent)';
+        el.style.outlineOffset = '-2px';
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+      }
+    });
+  }
+
+  function step() {
+    if (currentIdx < events.length - 1) {
+      currentIdx++;
+      render();
+    } else {
+      pause();
+    }
+  }
+
+  function play() {
+    if (currentIdx >= events.length - 1) currentIdx = -1;  // restart from beginning
+    playing = true;
+    playBtn.innerHTML = '⏸ Pause';
+    playBtn.classList.add('secondary');
+    if (timer) clearInterval(timer);
+    timer = setInterval(step, BASE_INTERVAL_MS / speed);
+    updateUI();
+  }
+
+  function pause() {
+    playing = false;
+    playBtn.innerHTML = '▶ Play';
+    playBtn.classList.remove('secondary');
+    if (timer) { clearInterval(timer); timer = null; }
+    updateUI();
+  }
+
+  function setSpeed(s, btn) {
+    speed = s;
+    [speed1x, speed2x, speed4x].forEach(b => {
+      b.classList.remove('secondary');
+      b.classList.add('secondary');
+    });
+    btn.classList.remove('secondary');
+    if (playing) {
+      if (timer) clearInterval(timer);
+      timer = setInterval(step, BASE_INTERVAL_MS / speed);
+    }
+  }
+
+  playBtn.addEventListener('click', () => playing ? pause() : play());
+  prevBtn.addEventListener('click', () => {
+    pause();
+    if (currentIdx > 0) currentIdx--;
+    else currentIdx = -1;
+    render();
+  });
+  nextBtn.addEventListener('click', () => {
+    pause();
+    if (currentIdx < events.length - 1) {
+      currentIdx++;
+      render();
+    }
+  });
+  resetBtn.addEventListener('click', () => {
+    pause();
+    currentIdx = -1;
+    render();
+  });
+  speed1x.addEventListener('click', () => setSpeed(1, speed1x));
+  speed2x.addEventListener('click', () => setSpeed(2, speed2x));
+  speed4x.addEventListener('click', () => setSpeed(4, speed4x));
+
+  // Click feed events to jump
+  feedItems.forEach((el, i) => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => {
+      pause();
+      currentIdx = i;
+      render();
+    });
+  });
+
+  // Initial render
+  render();
+})();
+</script>
+
+{% endblock %}

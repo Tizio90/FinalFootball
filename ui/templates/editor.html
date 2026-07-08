@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Data Editor — Football Sim{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <span>Data Editor</span>
+</div>
+
+<div class="page-head">
+  <div class="title-block" style="display: flex; align-items: center; gap: 16px;">
+    <span class="crest lg" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-500) 100%);">✏️</span>
+    <div>
+      <h1 style="margin: 0;">✏️ Data Editor</h1>
+      <div class="sub">Search and edit any player in the database — attributes, positions, and more</div>
+    </div>
+  </div>
+  <div class="actions">
+    <a href="/" class="btn secondary">← Home</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="alert info">
+    <span class="icon">ℹ</span>
+    <div>
+      Search by <strong>player name</strong> or <strong>club</strong>. Click any row to edit that player's full attribute set.
+      Changes are written directly to the database and apply everywhere — use with care!
+    </div>
+  </div>
+
+  <form action="/editor" method="get" class="form-row-flex" style="margin-top: 14px;">
+    <div style="flex: 1; min-width: 280px;">
+      <label for="search">Search players or clubs</label>
+      <input type="search" id="search" name="search" value="{{ search }}"
+             placeholder="e.g. Messi, Liverpool, Rodríguez…"
+             style="width: 100%; min-width: 280px;"
+             autocomplete="off" autofocus>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button type="submit" class="btn">🔍 Search</button>
+      {% if search %}
+      <a href="/editor" class="btn secondary">✕ Clear</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="section-head">
+    <h2>
+      <span class="icon">📋</span> Results
+      {% if search %}<span class="sub">for "{{ search }}"</span>{% endif %}
+    </h2>
+    <span class="pill {% if players %}green{% else %}amber{% endif %}">{{ players|length }} player{{ '' if players|length == 1 else 's' }}</span>
+  </div>
+
+  {% if players %}
+  <table>
+    <thead>
+      <tr>
+        <th class="num" style="width: 48px;">#</th>
+        <th>Name</th>
+        <th>Club</th>
+        <th class="num">Age</th>
+        <th>Position</th>
+        <th>Family</th>
+        <th class="right" style="width: 100px;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in players %}
+      <tr>
+        <td class="num muted">{{ loop.index }}</td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="crest sm">{{ p.name[:2]|upper }}</span>
+            <strong>{{ p.name }}</strong>
+          </div>
+        </td>
+        <td class="muted">{{ p.club or '—' }}</td>
+        <td class="num strong">{{ p.age }}</td>
+        <td><code>{{ p.position_raw or '—' }}</code></td>
+        <td>
+          {% if p.primary_family %}
+            <span class="pos-tag {{ p.primary_family }}">{{ p.primary_family }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td class="right">
+          <a href="/editor/player/{{ p.uid }}" class="btn small">✏️ Edit →</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <div class="icon">🔍</div>
+    {% if search %}
+    <div>No players matched "<strong>{{ search }}</strong>". Try a different name or club.</div>
+    {% else %}
+    <div>Start by typing a player name or club above.</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if players %}
+<div class="card card-accent">
+  <div class="section-head">
+    <h2><span class="icon">💡</span> Search tips</h2>
+  </div>
+  <ul class="muted small" style="margin: 0; padding-left: 18px; line-height: 1.7;">
+    <li>Search is case-insensitive and matches anywhere in the name or club.</li>
+    <li>Partial matches work — "Ron" matches <em>Ronaldo</em>, <em>Ronny</em>, <em>Aaron</em>, etc.</li>
+    <li>Use a club name to find every player on that squad.</li>
+    <li>Click <strong>Edit</strong> to fine-tune any of the 59 player attributes.</li>
+  </ul>
+</div>
+{% endif %}
+
+<div class="btn-group">
+  <a href="/" class="btn secondary">← Back to home</a>
+</div>
+
+{% endblock %}

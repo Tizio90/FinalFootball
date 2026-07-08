@@ -62,6 +62,11 @@ from sim.phase3 import (
     get_fan_confidence,
     add_news, get_news, generate_match_news, simulate_ai_transfers,
 )
+from sim.hall_of_fame import (
+    run_hof_migrations, record_achievement, get_top_scorers, get_top_managers,
+    get_club_records, update_manager_record, record_season_achievements,
+)
+from engine.tactics_ai import derive_manager_profile, get_profile_defaults, MANAGER_PROFILES
 
 import sqlite3
 import datetime as dt
@@ -1492,9 +1497,112 @@ def api_standings(season_id: str):
     return jsonify(standings.to_list())
 
 
+# ===========================================================================
+# Phase 4 routes — Hall of Fame, Editor, Replay, Analytics
+# ===========================================================================
+
+@app.route("/hall-of-fame")
+def hall_of_fame():
+    """Hall of Fame: cross-career persistent records."""
+    conn = get_db()
+    run_hof_migrations(conn)
+    top_scorers = get_top_scorers(conn, limit=20)
+    top_managers = get_top_managers(conn, limit=20)
+    club_records = get_club_records(conn, limit=20)
+    conn.close()
+    return render_template("hall_of_fame.html",
+                          top_scorers=top_scorers,
+                          top_managers=top_managers,
+                          club_records=club_records)
+
+
+@app.route("/editor", methods=["GET", "POST"])
+def editor():
+    """In-app data editor for players, clubs, and competitions."""
+    conn = get_db()
+    init_persistence(conn)
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "edit_player":
+            uid = int(request.form.get("uid"))
+            attr = request.form.get("attr")
+            value = int(request.form.get("value"))
+            # validate 0-100
+            value = max(0, min(100, value))
+            conn.execute(f'UPDATE player_attributes SET "{attr}" = ? WHERE uid = ?',
+                        (value, uid))
+            # log the edit
+            now = dt.datetime.now().isoformat()
+            try:
+                conn.execute(
+                    "INSERT INTO edit_log (entity, entity_id, field, old_value, new_value, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    ("player", uid, attr, None, value, now),
+                )
+            except sqlite3.OperationalError:
+                pass  # edit_log table doesn't exist yet
+            conn.commit()
+            conn.close()
+            return redirect(url_for("editor"))
+
+    # GET: show editor with player search
+    search = request.args.get("search", "")
+    players = []
+    if search:
+        players = conn.execute(
+            "SELECT p.uid, p.name, p.club, p.age, p.position_raw, p.primary_family "
+            "FROM players p WHERE p.name LIKE ? OR p.club LIKE ? "
+            "ORDER BY p.name LIMIT 50",
+            (f"%{search}%", f"%{search}%"),
+        ).fetchall()
+    conn.close()
+    return render_template("editor.html", players=players, search=search)
+
+
+@app.route("/editor/player/<int:uid>")
+def editor_player(uid: int):
+    """Edit a single player's attributes."""
+    conn = get_db()
+    init_persistence(conn)
+    player = conn.execute("SELECT * FROM players WHERE uid = ?", (uid,)).fetchone()
+    if player is None:
+        conn.close()
+        abort(404)
+    attrs = conn.execute("SELECT * FROM player_attributes WHERE uid = ?", (uid,)).fetchone()
+    conn.close()
+    return render_template("editor_player.html", player=player, attrs=attrs)
+
+
+@app.route("/match/<int:match_id>/replay")
+def match_replay(match_id: int):
+    """Match replay view — steps through events on the 2D pitch."""
+    conn = get_db()
+    m = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+    if m is None:
+        conn.close()
+        abort(404)
+    events = json.loads(m["events_json"])
+    conn.close()
+    return render_template("replay.html", match=m, events=events)
+
+
+@app.route("/match/<int:match_id>/analytics")
+def match_analytics(match_id: int):
+    """Post-match analytics: heatmap, pass network, xG timeline."""
+    conn = get_db()
+    m = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+    if m is None:
+        conn.close()
+        abort(404)
+    events = json.loads(m["events_json"])
+    conn.close()
+    return render_template("analytics.html", match=m, events=events)
+
+
 if __name__ == "__main__":
     # ensure DB exists & matches table is initialized
     conn = get_db()
     init_persistence(conn)
+    run_hof_migrations(conn)
     conn.close()
     app.run(host="127.0.0.1", port=5000, debug=True)
